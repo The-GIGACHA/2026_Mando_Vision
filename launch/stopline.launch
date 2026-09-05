@@ -1,0 +1,71 @@
+<launch>
+  <!-- 정지선 검출 — 전방 하향 웹캠 (cam_stopline / C920)
+
+       ★ 기본값은 1280x720 기준의 출발점일 뿐입니다.
+         차량에 장착한 뒤 아래 "튜닝 순서"대로 실제 영상을 보고 맞추세요.
+         rqt_image_view /perception/stopline/viz/compressed
+
+       ── 튜닝 순서 (이 순서가 중요합니다) ────────────────────────────
+        1. roi   : 노면만, 가로폭은 차로폭에 맞춰 (넓으면 채움률이 떨어짐)
+        2. tau   : 영상에서 정지선 두께를 픽셀로 재고 그보다 조금 크게
+                   ★ 두께의 '절반'이 아닙니다. 작으면 아예 안 잡힙니다
+        3. min/max_thickness : viz 에 찍히는 t=NNpx 값을 보고 그 주변으로
+                   ※ 보고되는 두께는 실제 페인트보다 20~30% 작게 나옵니다
+                     (DBD 응답이 띠 가장자리에서 완만해지기 때문)
+        4. min_fill : 정지선이 ROI 가로를 얼마나 채우는지 보고
+        5. min_response : 오검출이 남으면 올리고, 미검출이면 내리고
+  -->
+  <arg name="image" default="/cam_stopline/image_raw/compressed"/>
+  <arg name="hz"    default="15"/>
+
+  <node pkg="mando_vision_2026" type="stopline_detector.py"
+        name="stopline_detector" output="screen" respawn="true">
+
+    <param name="image_topic" value="$(arg image)"/>
+    <param name="rate_hz"     value="$(arg hz)"/>
+    <param name="viz_hz"      value="5"/>
+
+    <!-- ① ROI [x1,y1,x2,y2] 원본 픽셀. 비우면 전체 -->
+    <rosparam param="roi">[]</rosparam>
+
+    <!-- ② DBD 필터: 예상 정지선 두께(px)보다 조금 크게 -->
+    <param name="tau" value="30"/>
+
+    <!-- ③ 이진화 최소 응답 (Otsu 가 이보다 낮게는 못 내려감) -->
+    <param name="min_response" value="25"/>
+
+    <!-- ④ 모폴로지 — 열기(잡음 제거) 후 닫기(페인트 구멍 메우기) -->
+    <param name="open_width"  value="3"/>
+    <param name="close_width" value="25"/>
+
+    <!-- ⑤ 전단 탐색 범위 — 기울어진 정지선 대응 -->
+    <param name="max_angle_deg"  value="20"/>
+    <param name="angle_step_deg" value="2"/>
+
+    <!-- ⑥ 형상 검증 -->
+    <param name="min_fill"      value="0.55"/>
+    <param name="min_thickness" value="10"/>
+    <param name="max_thickness" value="120"/>
+
+    <!-- ⑦ 횡단보도 판별: 조건을 만족하는 띠가 이 개수 이상이면 정지선 아님 -->
+    <param name="crosswalk_min_bands" value="3"/>
+
+    <!-- ⑧ 시간 안정화 -->
+    <param name="vote_window" value="5"/>
+    <param name="vote_min"    value="3"/>
+
+    <!-- ── 거리 환산 (선택) ────────────────────────────────────────
+         바닥에 표식 4개를 놓고, 화면에서의 픽셀 좌표와 차량 기준 실제
+         거리(m)를 짝지어 넣으면 distance_m 이 나옵니다.
+         URDF 실측과 무관하게 이것만으로 동작합니다. 비워두면 null.
+
+         world_points 는 차량 기준: X=전방(m), Y=좌측(m)
+         네 점은 가급적 넓게 (가까이 2점 + 멀리 2점) 잡으세요.
+
+      <rosparam param="image_points">[[420,690],[860,690],[520,430],[760,430]]</rosparam>
+      <rosparam param="world_points">[[0.60,0.25],[0.60,-0.25],[1.80,0.25],[1.80,-0.25]]</rosparam>
+    -->
+    <rosparam param="image_points">[]</rosparam>
+    <rosparam param="world_points">[]</rosparam>
+  </node>
+</launch>

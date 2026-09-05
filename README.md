@@ -17,6 +17,7 @@ ROS 패키지명: **`mando_vision_2026`**
 | `lane_detector` | `src/lane_detector.py` | 차선 + 주행가능영역 | YOLOPv2 (TorchScript) |
 | `traffic_light_detector` | `src/traffic_light_detector.py` | 신호등 관측 | YOLOv12 |
 | `object_detector` | `src/object_detector.py` | 콘 / 배달표지판 | YOLOv12 |
+| `stopline_detector` | `src/stopline_detector.py` | 정지선 | — (OpenCV) |
 | `detection_monitor` | `src/detection_monitor.py` | 터미널 대시보드 (표시 전용) | — |
 
 ## 설계 원칙 — 세 줄
@@ -36,6 +37,7 @@ ROS 패키지명: **`mando_vision_2026`**
 | `/perception/lane` | `std_msgs/String` (JSON) | 15 Hz, 항상 |
 | `/perception/traffic_light` | `std_msgs/String` (JSON) | 10 Hz, 항상 |
 | `/perception/cone/{left,right}/detections` | `vision_msgs/Detection2DArray` | 10 Hz, 항상 |
+| `/perception/stopline` | `std_msgs/String` (JSON) | 15 Hz, 항상 |
 | `/perception/delivery_sign/detections` | `vision_msgs/Detection2DArray` | 5 Hz (기본 비활성) |
 | `/perception/*/viz/compressed` | `sensor_msgs/CompressedImage` | 5 Hz, **구독자 있을 때만** |
 
@@ -49,6 +51,18 @@ ROS 패키지명: **`mando_vision_2026`**
 `bbox` 는 **원본 이미지 좌표**입니다 (ROI 오프셋 복원 완료).
 `label` 은 5프레임 중 3표 이상일 때만 채워집니다. 그 외에는 `null`.
 
+`/perception/stopline` 페이로드:
+
+```json
+{"detected": true, "row": 512, "thickness_px": 25, "angle_deg": 4.0,
+ "fill": 0.96, "distance_m": 1.85, "crosswalk": false,
+ "votes": 4, "window": 5, "stamp": 1234567.89}
+```
+
+`row` 는 정지선 근접 모서리의 **원본 이미지 y 좌표**(ROI 가로 중앙 기준)입니다.
+`distance_m` 은 `~image_points`/`~world_points` 를 설정했을 때만 나오고, 아니면 `null`.
+횡단보도로 판단되면 `crosswalk: true` 이고 `detected` 는 `false` 입니다.
+
 ### 구독
 
 | 토픽 | 용도 |
@@ -56,6 +70,7 @@ ROS 패키지명: **`mando_vision_2026`**
 | `/cam_front/color/image_raw/compressed` | 차선, 신호등 (D455) |
 | `/cam_left/image_raw/compressed` | 콘 좌 (BRIO) |
 | `/cam_right/image_raw/compressed` | 콘 우 (BRIO) |
+| `/cam_stopline/image_raw/compressed` | 정지선 (C920 전방 하향) |
 | `/planning/intent` (`String`: `straight`\|`left`) | 모니터 판정 미리보기 |
 
 ## 실행
@@ -68,6 +83,7 @@ roslaunch mando_vision_2026 perception.launch
 roslaunch mando_vision_2026 lane.launch
 roslaunch mando_vision_2026 traffic_light.launch
 roslaunch mando_vision_2026 cone.launch
+roslaunch mando_vision_2026 stopline.launch
 
 # TF 만
 roslaunch mando_vision_2026 tf.launch
