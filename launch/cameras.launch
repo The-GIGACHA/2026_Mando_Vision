@@ -1,0 +1,119 @@
+<launch>
+  <!-- ════════════════════════════════════════════════════════════════════
+       USB 웹캠 3대 기동 (BRIO 좌·우, C920 정지선)
+
+       ★ 노드 이름 = 토픽 접두어
+         usb_cam_node 는 자기 노드의 private 네임스페이스에 발행합니다.
+         따라서 <node name="cam_left"> 면 /cam_left/image_raw 가 됩니다.
+         <group ns="cam_left"> 로 감싸면 /cam_left/usb_cam/image_raw 가 되어
+         인지 노드가 구독하는 경로와 어긋납니다. 감싸지 마세요.
+
+       ★ v4l2 설정은 재연결하면 초기화됩니다
+         케이블을 뽑았다 꽂거나, 허브 스위치를 껐다 켜거나, 절전에서 깨어나면
+         노출·초점·화이트밸런스가 공장 기본값(자동)으로 돌아갑니다.
+         자동 노출이 켜지면 저조도에서 프레임률이 30 → 7 로 떨어집니다.
+         그래서 v4l2-ctl 로 미리 걸지 않고 이 노드가 직접 설정하게 둡니다.
+         노드를 재시작하면 아래 값이 항상 다시 적용됩니다.
+
+       ★ 노출 단위 = 100 마이크로초
+         exposure=200  → 20 ms  → 최대 50 fps   (실내)
+         exposure=40   →  4 ms  → 최대 250 fps  (야외 주간)
+         야외는 실내보다 광량이 100배 이상이라 반드시 다시 튜닝해야 합니다.
+       ════════════════════════════════════════════════════════════════════ -->
+
+  <arg name="width"    default="1280"/>
+  <arg name="height"   default="720"/>
+  <arg name="fps"      default="30"/>
+  <arg name="exposure" default="200"/>   <!-- 야외: 20~60 -->
+  <arg name="gain"     default="150"/>   <!-- 야외: 0~50 -->
+  <arg name="wb"       default="4500"/>
+  <arg name="stopline_width"  default="640"/>
+  <arg name="stopline_height" default="480"/>
+
+  <!-- ── BRIO 좌측 : 차선유지 · 콘 · 주차 보조 ────────────────────────── -->
+  <node name="cam_left" pkg="usb_cam" type="usb_cam_node"
+        output="screen" respawn="true" respawn_delay="2">
+    <param name="video_device"       value="/dev/cam_left"/>
+    <param name="camera_name"        value="cam_left"/>
+    <param name="camera_frame_id"    value="cam_left_optical_frame"/>
+    <param name="pixel_format"       value="mjpeg"/>
+    <param name="io_method"          value="mmap"/>
+    <param name="image_width"        value="$(arg width)"/>
+    <param name="image_height"       value="$(arg height)"/>
+    <param name="framerate"          value="$(arg fps)"/>
+    <param name="autofocus"          value="false"/>
+    <param name="focus"              value="0"/>
+    <param name="autoexposure"       value="false"/>
+    <param name="exposure"           value="$(arg exposure)"/>
+    <param name="auto_white_balance" value="false"/>
+    <param name="white_balance"      value="$(arg wb)"/>
+    <param name="gain"               value="$(arg gain)"/>
+  </node>
+
+  <!-- ── BRIO 우측 ────────────────────────────────────────────────────── -->
+  <node name="cam_right" pkg="usb_cam" type="usb_cam_node"
+        output="screen" respawn="true" respawn_delay="2">
+    <param name="video_device"       value="/dev/cam_right"/>
+    <param name="camera_name"        value="cam_right"/>
+    <param name="camera_frame_id"    value="cam_right_optical_frame"/>
+    <param name="pixel_format"       value="mjpeg"/>
+    <param name="io_method"          value="mmap"/>
+    <param name="image_width"        value="$(arg width)"/>
+    <param name="image_height"       value="$(arg height)"/>
+    <param name="framerate"          value="$(arg fps)"/>
+    <param name="autofocus"          value="false"/>
+    <param name="focus"              value="0"/>
+    <param name="autoexposure"       value="false"/>
+    <param name="exposure"           value="$(arg exposure)"/>
+    <param name="auto_white_balance" value="false"/>
+    <param name="white_balance"      value="$(arg wb)"/>
+    <param name="gain"               value="$(arg gain)"/>
+  </node>
+
+  <!-- ── C920 하향 : 정지선 (규정 3·5번) ──────────────────────────────
+       정지선은 굵은 흰 띠라 해상도가 거의 필요 없습니다.
+       640x480 으로 두어 USB2 버스와 CPU 를 아낍니다.                    -->
+  <node name="cam_stopline" pkg="usb_cam" type="usb_cam_node"
+        output="screen" respawn="true" respawn_delay="2">
+    <param name="video_device"       value="/dev/cam_stopline"/>
+    <param name="camera_name"        value="cam_stopline"/>
+    <param name="camera_frame_id"    value="cam_stopline_optical_frame"/>
+    <param name="pixel_format"       value="mjpeg"/>
+    <param name="io_method"          value="mmap"/>
+    <param name="image_width"        value="$(arg stopline_width)"/>
+    <param name="image_height"       value="$(arg stopline_height)"/>
+    <param name="framerate"          value="$(arg fps)"/>
+    <param name="autofocus"          value="false"/>
+    <param name="focus"              value="0"/>
+    <param name="autoexposure"       value="false"/>
+    <param name="exposure"           value="$(arg exposure)"/>
+    <param name="auto_white_balance" value="false"/>
+    <param name="white_balance"      value="$(arg wb)"/>
+    <param name="gain"               value="$(arg gain)"/>
+  </node>
+
+  <!-- ── D455 (선택) ──────────────────────────────────────────────────
+       기본 비활성. realsense2_camera 를 따로 띄우거나 d455:=true 로 포함.
+       initial_reset 은 이전 세션이 깨끗하게 안 닫혔을 때 생기는
+       "Resource temporarily unavailable" 을 예방합니다.                 -->
+  <arg name="d455"       default="false"/>
+  <arg name="d455_depth" default="true"/>
+
+  <include if="$(arg d455)"
+           file="$(find realsense2_camera)/launch/rs_camera.launch">
+    <arg name="camera"        value="cam_front"/>
+    <arg name="initial_reset" value="true"/>
+    <arg name="enable_depth"  value="$(arg d455_depth)"/>
+    <arg name="align_depth"   value="$(arg d455_depth)"/>
+    <arg name="enable_infra1" value="false"/>
+    <arg name="enable_infra2" value="false"/>
+    <arg name="enable_gyro"   value="false"/>
+    <arg name="enable_accel"  value="false"/>
+    <arg name="color_width"   value="1280"/>
+    <arg name="color_height"  value="720"/>
+    <arg name="color_fps"     value="30"/>
+    <arg name="depth_width"   value="848"/>
+    <arg name="depth_height"  value="480"/>
+    <arg name="depth_fps"     value="30"/>
+  </include>
+</launch>
