@@ -19,6 +19,7 @@ catkin_install_python(PROGRAMS
   src/lane_detector.py
   src/traffic_light_detector.py
   src/object_detector.py
+  src/stopline_detector.py
   src/detection_monitor.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

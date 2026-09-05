@@ -7,6 +7,7 @@
   <arg name="lane"          default="true"/>
   <arg name="traffic_light" default="true"/>
   <arg name="cone"          default="true"/>
+  <arg name="stopline"      default="true"/>
   <arg name="delivery_sign" default="false"/>   <!-- 2026 규정에 없음 -->
   <arg name="monitor"       default="true"/>
 
@@ -14,6 +15,7 @@
   <include if="$(arg lane)"          file="$(find mando_vision_2026)/launch/lane.launch"/>
   <include if="$(arg traffic_light)" file="$(find mando_vision_2026)/launch/traffic_light.launch"/>
   <include if="$(arg cone)"          file="$(find mando_vision_2026)/launch/cone.launch"/>
+  <include if="$(arg stopline)"      file="$(find mando_vision_2026)/launch/stopline.launch"/>
   <include if="$(arg delivery_sign)" file="$(find mando_vision_2026)/launch/delivery_sign.launch"/>
 
   <node if="$(arg monitor)" pkg="mando_vision_2026" type="detection_monitor.py"
