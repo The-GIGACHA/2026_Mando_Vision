@@ -1,0 +1,29 @@
+<launch>
+  <!-- 콘 검출 — 좌/우 BRIO. ★ 카메라 1대당 노드 1개 (2025 는 한 노드에서
+       3대를 순차 처리해 지연이 3배였습니다) -->
+  <arg name="hz" default="10"/>
+
+  <node pkg="mando_vision_2026" type="object_detector.py"
+        name="cone_detector_left" output="screen" respawn="true">
+    <param name="section"          value="cone"/>
+    <param name="weights"          value="$(find mando_vision_2026)/weights/cone.pt"/>
+    <param name="image_topic"      value="/cam_left/image_raw/compressed"/>
+    <param name="detections_topic" value="/perception/cone/left/detections"/>
+    <param name="frame_id"         value="cam_left_optical_frame"/>
+    <param name="confidence"       value="0.5"/>
+    <param name="iou"              value="0.45"/>
+    <param name="infer_hz"         value="$(arg hz)"/>
+  </node>
+
+  <node pkg="mando_vision_2026" type="object_detector.py"
+        name="cone_detector_right" output="screen" respawn="true">
+    <param name="section"          value="cone"/>
+    <param name="weights"          value="$(find mando_vision_2026)/weights/cone.pt"/>
+    <param name="image_topic"      value="/cam_right/image_raw/compressed"/>
+    <param name="detections_topic" value="/perception/cone/right/detections"/>
+    <param name="frame_id"         value="cam_right_optical_frame"/>
+    <param name="confidence"       value="0.5"/>
+    <param name="iou"              value="0.45"/>
+    <param name="infer_hz"         value="$(arg hz)"/>
+  </node>
+</launch>

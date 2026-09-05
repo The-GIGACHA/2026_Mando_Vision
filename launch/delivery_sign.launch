@@ -1,0 +1,19 @@
+<launch>
+  <!-- 배달 표지판 — ERP42 대회용 클래스입니다.
+       2026 HL FMA 경기규정에는 배달 미션이 없으므로 기본 비활성입니다.
+       주차 미션 보조로 parkinglot 클래스만 쓸 여지가 있어 남겨둡니다. -->
+  <arg name="image" default="/cam_front/color/image_raw/compressed"/>
+
+  <node pkg="mando_vision_2026" type="object_detector.py"
+        name="delivery_sign_detector" output="screen">
+    <param name="section"          value="delivery_sign"/>
+    <param name="weights"
+           value="$(find mando_vision_2026)/weights/delivery_sign.pt"/>
+    <param name="image_topic"      value="$(arg image)"/>
+    <param name="detections_topic" value="/perception/delivery_sign/detections"/>
+    <param name="frame_id"         value="cam_front_color_optical_frame"/>
+    <param name="confidence"       value="0.6"/>
+    <param name="infer_hz"         value="5"/>
+    <rosparam param="roi">[]</rosparam>
+  </node>
+</launch>

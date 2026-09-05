@@ -1,0 +1,15 @@
+<launch>
+  <!-- YOLOPv2 차선 / 주행가능영역 — 전방 D455 컬러 -->
+  <arg name="image" default="/cam_front/color/image_raw/compressed"/>
+  <arg name="hz"    default="15"/>
+
+  <node pkg="mando_vision_2026" type="lane_detector.py" name="lane_detector"
+        output="screen" respawn="true">
+    <param name="weights"     value="$(find mando_vision_2026)/weights/lane.pt"/>
+    <param name="image_topic" value="$(arg image)"/>
+    <param name="img_size"    value="640"/>
+    <param name="device"      value="auto"/>   <!-- 2025 는 기본값이 cpu 였습니다 -->
+    <param name="infer_hz"    value="$(arg hz)"/>
+    <param name="viz_hz"      value="5"/>
+  </node>
+</launch>

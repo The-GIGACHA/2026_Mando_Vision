@@ -1,0 +1,84 @@
+# ══════════════════════════════════════════════════════════════════════════
+#  클래스 매핑 — 단일 진실 소스 (Single Source of Truth)
+#
+#  ★ 이 파일의 값은 실제 .pt 파일의 model.names 를 그대로 옮긴 것입니다.
+#    (tools/check_weights.py 로 추출)
+#    노드는 시작 시 이 파일과 실제 모델 names 를 대조하고,
+#    다르면 ROS_FATAL 로 즉시 종료합니다. 코드에 클래스를 하드코딩하지 마세요.
+#
+#  ⚠️  2025 저장소의 파일명과 내용이 서로 바뀌어 있습니다:
+#        weights/sign.pt          → 실제 내용: 배달 표지판 7종
+#        weights/traffic_sign.pt  → 실제 내용: 콘 2종
+#      2025 all_detection.launch 는 이걸 모르고 반대로 물려 있었습니다.
+#      아래 file 항목은 "실제 내용" 기준으로 바로잡은 것입니다.
+#
+#  ※ 이름 앞의 숫자는 원본 통합 데이터셋(0~8)의 인덱스입니다.
+#    모델 내부의 실제 인덱스와 다릅니다. 예: sign.pt 의 로컬 6번 = "8_parkinglot"
+#    코드에서는 반드시 로컬 인덱스(id)를 쓰세요.
+# ══════════════════════════════════════════════════════════════════════════
+
+traffic_light:
+  # 2025-09-18 재학습본 (Mando_Vision). 19,174,931 bytes
+  file: "weights/traffic_light_20250918.pt"
+  names:
+    0: green_left
+    1: green
+    2: left          # ⚠ 의미 미확정 — 아래 note 참조
+    3: red
+    4: yellow
+
+  # ── 판단 화이트리스트: 여기 없는 라벨은 전부 STOP ──────────────────
+  #    "무엇이 STOP인가"가 아니라 "무엇이 GO인가"만 나열합니다.
+  go_straight: [green]                 # 직진 허용
+  go_left:     [green_left]            # 좌회전 허용
+  #            ↑ "left" 는 의미 확정 전까지 의도적으로 제외 (fail-safe)
+
+  note: |
+    2025-09-01 모델은 index 2 가 "red_left" 였고, 09-18 재학습본에서 "left" 로 바뀌었습니다.
+    나머지 4개 클래스는 이름·순서가 동일하므로 단순 리네이밍일 가능성이 높습니다
+    (= 실제로는 적색+좌회전 = 정지).
+    확정 전까지 go_left 에서 제외해 둡니다. 확정되면 여기에 추가하세요.
+    확인 방법: 좌회전 화살표만 켜진 사진 / 적색만 켜진 사진을 넣고 어느 라벨이 나오는지 비교.
+
+traffic_light_2025_09_01:
+  # 구버전. 비교·검증용으로만 보관. 19,108,179 bytes
+  file: "weights/traffic_light_20250901.pt"
+  names: {0: green_left, 1: green, 2: red_left, 3: red, 4: yellow}
+
+cone:
+  # ⚠ 2025 저장소에서는 traffic_sign.pt 라는 이름이었습니다 (내용은 콘)
+  file: "weights/cone.pt"
+  names:
+    0: cone_blue        # 원본 데이터셋 6번
+    1: cone_yellow      # 원본 데이터셋 7번
+  note: |
+    좌/우 카메라 중 어느 쪽이 보았는지가 아니라, 모델이 분류한 id 를 씁니다.
+    2025 gigacha_sensor_fusion.cpp 는 카메라 위치로 색을 덮어썼습니다 — 재현하지 마세요.
+
+delivery_sign:
+  # ⚠ 2025 저장소에서는 sign.pt 라는 이름이었습니다 (내용은 배달 표지판)
+  file: "weights/delivery_sign.pt"
+  names:
+    0: delivery_a1      # 원본 0
+    1: delivery_a2      # 원본 1
+    2: delivery_a3      # 원본 2
+    3: delivery_b1      # 원본 3
+    4: delivery_b2      # 원본 4
+    5: delivery_b3      # 원본 5
+    6: parkinglot       # 원본 8  ← 로컬 인덱스는 6 입니다
+  note: |
+    2026 HL FMA 경기규정에는 배달 표지판(delivery_a/b) 미션이 없습니다.
+    ERP42 대회용 클래스이므로 2026 에서는 parkinglot 외에는 쓸 일이 없을 수 있습니다.
+    주차 미션(규정 6·8번) 보조로 parkinglot 만 활용을 검토하세요.
+
+lane:
+  # YOLOPv2 TorchScript. 156,380,200 bytes
+  file: "weights/lane.pt"
+  type: torchscript
+  input: [384, 640]     # letterbox 결과. 원본을 1280x720 으로 맞춘 뒤 계산됨
+  note: |
+    ★ 입력을 반드시 1280x720(16:9)으로 리사이즈한 뒤 letterbox 하세요.
+      utils.py 의 seg[:, :, 12:372, :] 크롭이 그 상하 12px 패딩을 제거하는 전제입니다.
+      다른 종횡비를 넣으면 마스크가 조용히 어긋납니다.
+    출력 = ([pred(list), anchor_grid], seg, ll)
+      pred 는 텐서가 아니라 3개 텐서의 리스트입니다 (split_for_trace_model 에 넘길 것).

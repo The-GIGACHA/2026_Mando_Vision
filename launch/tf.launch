@@ -1,0 +1,9 @@
+<launch>
+  <!-- 센서 TF 트리. urdf/gigacha_sensors.urdf.xacro 의 실측값을 채운 뒤 사용.
+       확인:  rosrun rqt_tf_tree rqt_tf_tree
+              rosrun tf tf_echo base_link cam_left_optical_frame -->
+  <param name="robot_description"
+         command="$(find xacro)/xacro $(find mando_vision_2026)/urdf/gigacha_sensors.urdf.xacro"/>
+  <node pkg="robot_state_publisher" type="robot_state_publisher"
+        name="robot_state_publisher" output="screen"/>
+</launch>

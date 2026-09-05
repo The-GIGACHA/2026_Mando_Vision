@@ -1,0 +1,184 @@
+<?xml version="1.0"?>
+<!--
+  ════════════════════════════════════════════════════════════════════════
+   GIGACHA 1/5 Scale — 센서 TF 트리
+  ════════════════════════════════════════════════════════════════════════
+
+   ▣ 좌표 규약 (REP-103) — 전 시스템이 이걸 따릅니다
+       +x = 전방 (차량 진행방향)
+       +y = 좌측
+       +z = 위
+
+   ▣ base_link 원점 = 뒷차축 중심 (Ackermann 조향의 운동학 기준점)
+       base_footprint = base_link을 지면에 수직 투영한 점 (z=0)
+
+   ▣ 회전 부호 — ★ 여기서 제일 많이 틀립니다 ★
+       roll  (x축 회전) : 차체가 오른쪽으로 기울면  +
+       pitch (y축 회전) : 카메라가 아래를 보면      +   /  위를 보면  −
+       yaw   (z축 회전) : 카메라가 좌측을 보면      +   /  우측을 보면 −
+
+       예) D455가 위를 8도 보고 있다  →  pitch = -8
+           C920이 아래를 25도 보고 있다 →  pitch = +25
+           좌측 BRIO가 왼쪽 75도를 본다 →  yaw   = +75
+
+   ▣ _link 와 _optical_frame 의 차이 (★ 작년 융합 버그의 근본 원인)
+       xxx_link           : 로봇 규약. x=렌즈방향, y=좌, z=위
+       xxx_optical_frame  : 광학 규약. z=렌즈방향, x=우, y=아래
+
+       카메라 내부행렬 K는 광학 규약을 전제합니다.
+       따라서 LiDAR 점을 이미지에 투영할 때는 반드시
+       xxx_optical_frame 좌표로 변환한 뒤 K를 곱해야 합니다.
+       (작년 코드는 LiDAR 좌표를 그대로 K에 곱해서 결과가 무의미했습니다)
+
+  ════════════════════════════════════════════════════════════════════════
+-->
+<robot name="gigacha" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:property name="d2r" value="0.01745329252"/>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       ▼▼▼ 측정 워크시트 — 줄자·수평계로 재서 이 숫자만 채우세요 ▼▼▼
+
+       거리 단위 = m,  각도 단위 = deg
+       기준점    = 뒷차축 중심 (좌우 바퀴 중심을 잇는 선의 한가운데)
+       ══════════════════════════════════════════════════════════════════ -->
+
+  <!-- ── 차량 기본 제원 ─────────────────────────────────────────────── -->
+  <xacro:property name="wheel_radius"  value="0.000"/>  <!-- 뒷바퀴 반지름 = base_link 높이 -->
+  <xacro:property name="wheelbase"     value="0.000"/>  <!-- 앞차축~뒷차축 거리 (참고용) -->
+
+  <!-- ── LiDAR ──────────────────────────────────────────────────────── -->
+  <xacro:property name="lidar_frame" value="os_sensor"/>  <!-- Ouster=os_sensor, Velodyne=velodyne -->
+  <xacro:property name="lidar_x"     value="0.000"/>
+  <xacro:property name="lidar_y"     value="0.000"/>
+  <xacro:property name="lidar_z"     value="0.000"/>
+  <xacro:property name="lidar_roll"  value="0.0"/>
+  <xacro:property name="lidar_pitch" value="0.0"/>
+  <xacro:property name="lidar_yaw"   value="0.0"/>   <!-- 커넥터가 뒤를 보게 달았으면 180 -->
+
+  <!-- ── D455 (전방 상향 / 신호등·장애물) ───────────────────────────── -->
+  <!--   ※ 위를 보고 있으므로 pitch는 음수입니다 -->
+  <xacro:property name="front_x"     value="0.000"/>
+  <xacro:property name="front_y"     value="0.000"/>
+  <xacro:property name="front_z"     value="0.000"/>
+  <xacro:property name="front_roll"  value="0.0"/>
+  <xacro:property name="front_pitch" value="0.0"/>   <!-- 예: -8 -->
+  <xacro:property name="front_yaw"   value="0.0"/>
+
+  <!-- ── C920 (전방 하향 / 정지선) ──────────────────────────────────── -->
+  <!--   ※ 아래를 보고 있으므로 pitch는 양수입니다 -->
+  <xacro:property name="stop_x"      value="0.000"/>
+  <xacro:property name="stop_y"      value="0.000"/>
+  <xacro:property name="stop_z"      value="0.000"/>
+  <xacro:property name="stop_roll"   value="0.0"/>
+  <xacro:property name="stop_pitch"  value="0.0"/>   <!-- 예: +25 -->
+  <xacro:property name="stop_yaw"    value="0.0"/>
+
+  <!-- ── BRIO 좌측 (차선유지·콘·주차보조) ───────────────────────────── -->
+  <xacro:property name="left_x"      value="0.000"/>
+  <xacro:property name="left_y"      value="0.000"/>   <!-- 좌측이므로 양수 -->
+  <xacro:property name="left_z"      value="0.000"/>
+  <xacro:property name="left_roll"   value="0.0"/>
+  <xacro:property name="left_pitch"  value="0.0"/>   <!-- 노면을 보면 양수 -->
+  <xacro:property name="left_yaw"    value="0.0"/>   <!-- 예: +75 -->
+
+  <!-- ── BRIO 우측 ──────────────────────────────────────────────────── -->
+  <xacro:property name="right_x"     value="0.000"/>
+  <xacro:property name="right_y"     value="0.000"/>   <!-- 우측이므로 음수 -->
+  <xacro:property name="right_z"     value="0.000"/>
+  <xacro:property name="right_roll"  value="0.0"/>
+  <xacro:property name="right_pitch" value="0.0"/>
+  <xacro:property name="right_yaw"   value="0.0"/>   <!-- 예: -75 -->
+
+  <!-- ── IMU / GPS ──────────────────────────────────────────────────── -->
+  <xacro:property name="imu_x"  value="0.000"/>
+  <xacro:property name="imu_y"  value="0.000"/>
+  <xacro:property name="imu_z"  value="0.000"/>
+  <xacro:property name="imu_yaw" value="0.0"/>   <!-- IMU 케이스의 x축이 차량 전방과 이루는 각 -->
+
+  <xacro:property name="gps_x"  value="0.000"/>  <!-- GPS는 안테나 위상중심 기준 -->
+  <xacro:property name="gps_y"  value="0.000"/>
+  <xacro:property name="gps_z"  value="0.000"/>
+
+  <!-- ▲▲▲ 워크시트 끝 — 아래는 건드릴 필요 없습니다 ▲▲▲ -->
+
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       매크로 정의
+       ══════════════════════════════════════════════════════════════════ -->
+
+  <!-- 일반 센서(LiDAR/IMU/GPS)용: _link 하나만 -->
+  <xacro:macro name="rigid_mount" params="name x y z roll:=0 pitch:=0 yaw:=0">
+    <link name="${name}"/>
+    <joint name="${name}_joint" type="fixed">
+      <parent link="base_link"/>
+      <child  link="${name}"/>
+      <origin xyz="${x} ${y} ${z}"
+              rpy="${roll*d2r} ${pitch*d2r} ${yaw*d2r}"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- 카메라용: _link + _optical_frame 쌍 -->
+  <xacro:macro name="camera_mount" params="name x y z roll:=0 pitch:=0 yaw:=0">
+    <link name="${name}_link"/>
+    <joint name="${name}_joint" type="fixed">
+      <parent link="base_link"/>
+      <child  link="${name}_link"/>
+      <origin xyz="${x} ${y} ${z}"
+              rpy="${roll*d2r} ${pitch*d2r} ${yaw*d2r}"/>
+    </joint>
+
+    <!-- 로봇규약 → 광학규약 고정 회전. 모든 카메라 공통, 절대 바꾸지 마세요. -->
+    <link name="${name}_optical_frame"/>
+    <joint name="${name}_optical_joint" type="fixed">
+      <parent link="${name}_link"/>
+      <child  link="${name}_optical_frame"/>
+      <origin xyz="0 0 0" rpy="${-90*d2r} 0 ${-90*d2r}"/>
+    </joint>
+  </xacro:macro>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       프레임 트리 조립
+       ══════════════════════════════════════════════════════════════════ -->
+
+  <link name="base_footprint"/>
+  <link name="base_link"/>
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child  link="base_link"/>
+    <origin xyz="0 0 ${wheel_radius}" rpy="0 0 0"/>
+  </joint>
+
+  <xacro:rigid_mount name="${lidar_frame}"
+      x="${lidar_x}" y="${lidar_y}" z="${lidar_z}"
+      roll="${lidar_roll}" pitch="${lidar_pitch}" yaw="${lidar_yaw}"/>
+
+  <xacro:rigid_mount name="imu_link"
+      x="${imu_x}" y="${imu_y}" z="${imu_z}" yaw="${imu_yaw}"/>
+
+  <xacro:rigid_mount name="gps_link"
+      x="${gps_x}" y="${gps_y}" z="${gps_z}"/>
+
+  <!-- D455: realsense2_camera 드라이버가 cam_front_link 아래를
+       color/depth/imu optical frame으로 직접 뻗습니다.
+       따라서 여기서는 _link 까지만 만들고 optical은 드라이버에 맡깁니다.
+       실행 시 반드시:  roslaunch realsense2_camera rs_camera.launch camera:=cam_front -->
+  <xacro:rigid_mount name="cam_front_link"
+      x="${front_x}" y="${front_y}" z="${front_z}"
+      roll="${front_roll}" pitch="${front_pitch}" yaw="${front_yaw}"/>
+
+  <!-- USB 웹캠 3대는 드라이버가 TF를 안 주므로 여기서 optical까지 정의 -->
+  <xacro:camera_mount name="cam_stopline"
+      x="${stop_x}" y="${stop_y}" z="${stop_z}"
+      roll="${stop_roll}" pitch="${stop_pitch}" yaw="${stop_yaw}"/>
+
+  <xacro:camera_mount name="cam_left"
+      x="${left_x}" y="${left_y}" z="${left_z}"
+      roll="${left_roll}" pitch="${left_pitch}" yaw="${left_yaw}"/>
+
+  <xacro:camera_mount name="cam_right"
+      x="${right_x}" y="${right_y}" z="${right_z}"
+      roll="${right_roll}" pitch="${right_pitch}" yaw="${right_yaw}"/>
+
+</robot>

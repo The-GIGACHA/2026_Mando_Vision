@@ -1,0 +1,21 @@
+<launch>
+  <!-- 신호등 — 전방 상향 D455 -->
+  <arg name="image" default="/cam_front/color/image_raw/compressed"/>
+  <arg name="hz"    default="10"/>
+
+  <node pkg="mando_vision_2026" type="traffic_light_detector.py"
+        name="traffic_light_detector" output="screen" respawn="true">
+    <param name="weights"
+           value="$(find mando_vision_2026)/weights/traffic_light_20250918.pt"/>
+    <param name="image_topic" value="$(arg image)"/>
+    <param name="confidence"  value="0.5"/>
+    <param name="infer_hz"    value="$(arg hz)"/>
+    <param name="vote_window" value="5"/>
+    <param name="vote_min"    value="3"/>
+
+    <!-- ROI [x1,y1,x2,y2] 원본 이미지 기준. 소실점 주변을 원본 해상도 그대로
+         크롭해 넣으면 원거리 신호등의 픽셀이 살아납니다.
+         비워두면 전체 이미지. 차량에 장착 후 실제 영상 보고 채우세요. -->
+    <rosparam param="roi">[]</rosparam>
+  </node>
+</launch>
