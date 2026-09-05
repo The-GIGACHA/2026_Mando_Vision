@@ -34,13 +34,31 @@ import sys
 
 import numpy as np
 import cv2
+def _add_utils_to_path():
+    """utils/ 를 import 경로에 추가합니다.
+
+    catkin_install_python 이 스크립트를 devel/lib/<pkg>/ 로 복사하므로
+    __file__ 기준 "../utils" 는 그곳에서 존재하지 않습니다.
+    소스 트리에서 실행할 때는 상대경로, 그 외에는 rospkg 로 찾습니다."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    cand = os.path.join(here, "..", "utils")
+    if not os.path.isdir(cand):
+        import rospkg
+        cand = os.path.join(
+            rospkg.RosPack().get_path("mando_vision_2026"), "utils")
+    if cand not in sys.path:
+        sys.path.insert(0, cand)
+
+
+_add_utils_to_path()
+
 import rospy
 from sensor_msgs.msg import CompressedImage
 from vision_msgs.msg import (Detection2DArray, Detection2D,
                              BoundingBox2D, ObjectHypothesisWithPose)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_HERE, "..", "utils"))
+
 import class_map                                              # noqa: E402
 from infer_loop import LatestFrame, Throttle                  # noqa: E402
 

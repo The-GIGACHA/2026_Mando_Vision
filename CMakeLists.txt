@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.10)
 project(mando_vision_2026)
 
 find_package(catkin REQUIRED COMPONENTS
@@ -6,7 +6,6 @@ find_package(catkin REQUIRED COMPONENTS
   cv_bridge image_transport tf2_ros
 )
 
-catkin_python_setup()
 
 catkin_package(
   CATKIN_DEPENDS rospy std_msgs sensor_msgs geometry_msgs vision_msgs
@@ -24,7 +23,7 @@ catkin_install_python(PROGRAMS
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-install(DIRECTORY config launch urdf weights tools docs
+install(DIRECTORY config launch urdf weights tools docs utils
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
   PATTERN "*.pt" EXCLUDE
 )

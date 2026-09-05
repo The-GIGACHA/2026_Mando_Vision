@@ -34,11 +34,29 @@ import sys
 
 import numpy as np
 import cv2
+def _add_utils_to_path():
+    """utils/ 를 import 경로에 추가합니다.
+
+    catkin_install_python 이 스크립트를 devel/lib/<pkg>/ 로 복사하므로
+    __file__ 기준 "../utils" 는 그곳에서 존재하지 않습니다.
+    소스 트리에서 실행할 때는 상대경로, 그 외에는 rospkg 로 찾습니다."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    cand = os.path.join(here, "..", "utils")
+    if not os.path.isdir(cand):
+        import rospkg
+        cand = os.path.join(
+            rospkg.RosPack().get_path("mando_vision_2026"), "utils")
+    if cand not in sys.path:
+        sys.path.insert(0, cand)
+
+
+_add_utils_to_path()
+
 import rospy
 from sensor_msgs.msg import CompressedImage
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_HERE, "..", "utils"))
+
 from infer_loop import LatestFrame, HeartbeatPublisher, Throttle    # noqa: E402
 
 PROC_W, PROC_H = 1280, 720          # ★ 위 설명 참조. 바꾸지 마세요.
@@ -49,7 +67,7 @@ class LaneDetector(object):
         rospy.init_node("lane_detector")
 
         import torch
-        sys.path.insert(0, os.path.join(_HERE, "..", "utils"))
+
         from utils import lane_line_mask, driving_area_mask, letterbox
         self._torch = torch
         self._lane_mask = lane_line_mask
