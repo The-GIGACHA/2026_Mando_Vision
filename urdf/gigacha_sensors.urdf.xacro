@@ -43,62 +43,63 @@
        기준점    = 뒷차축 중심 (좌우 바퀴 중심을 잇는 선의 한가운데)
        ══════════════════════════════════════════════════════════════════ -->
 
-  <!-- ── 차량 기본 제원 ─────────────────────────────────────────────── -->
-  <xacro:property name="wheel_radius"  value="0.000"/>  <!-- 뒷바퀴 반지름 = base_link 높이 -->
-  <xacro:property name="wheelbase"     value="0.000"/>  <!-- 앞차축~뒷차축 거리 (참고용) -->
+    <!-- ── 차량 기본 제원 ─────────────────────────────────────────────── -->
+  <xacro:property name="wheel_radius"  value="0.150"/>
+  <xacro:property name="wheelbase"     value="0.725"/>
 
-  <!-- ── LiDAR ──────────────────────────────────────────────────────── -->
-  <xacro:property name="lidar_frame" value="os_sensor"/>  <!-- Ouster=os_sensor, Velodyne=velodyne -->
-  <xacro:property name="lidar_x"     value="0.000"/>
+  <!-- ── 2D LiDAR (YDLIDAR) ─────────────────────────────────────────
+       frame 이름은 드라이버 발행값과 일치해야 합니다.
+       확인:  rostopic echo -n1 /scan | grep frame_id                 -->
+  <xacro:property name="lidar_frame" value="laser_frame"/>
+  <xacro:property name="lidar_x"     value="0.850"/>
   <xacro:property name="lidar_y"     value="0.000"/>
-  <xacro:property name="lidar_z"     value="0.000"/>
+  <xacro:property name="lidar_z"     value="0.330"/>   <!-- 지면 0.480 -->
   <xacro:property name="lidar_roll"  value="0.0"/>
-  <xacro:property name="lidar_pitch" value="0.0"/>
-  <xacro:property name="lidar_yaw"   value="0.0"/>   <!-- 커넥터가 뒤를 보게 달았으면 180 -->
+  <xacro:property name="lidar_pitch" value="0.0"/>     <!-- ★ 2D 라이다는 0 유지 필수 -->
+  <xacro:property name="lidar_yaw"   value="0.0"/>
 
-  <!-- ── D455 (전방 상향 / 신호등·장애물) ───────────────────────────── -->
-  <!--   ※ 위를 보고 있으므로 pitch는 음수입니다 -->
-  <xacro:property name="front_x"     value="0.000"/>
+  <!-- ── D455 (전방 상향) ───────────────────────────────────────────── -->
+  <xacro:property name="front_x"     value="0.750"/>
   <xacro:property name="front_y"     value="0.000"/>
-  <xacro:property name="front_z"     value="0.000"/>
+  <xacro:property name="front_z"     value="0.520"/>   <!-- 지면 0.670 -->
   <xacro:property name="front_roll"  value="0.0"/>
-  <xacro:property name="front_pitch" value="0.0"/>   <!-- 예: -8 -->
+  <xacro:property name="front_pitch" value="0.0"/>     <!-- 현장에서 확정, 위를 보면 음수 -->
   <xacro:property name="front_yaw"   value="0.0"/>
 
   <!-- ── C920 (전방 하향 / 정지선) ──────────────────────────────────── -->
-  <!--   ※ 아래를 보고 있으므로 pitch는 양수입니다 -->
-  <xacro:property name="stop_x"      value="0.000"/>
+  <xacro:property name="stop_x"      value="0.800"/>
   <xacro:property name="stop_y"      value="0.000"/>
-  <xacro:property name="stop_z"      value="0.000"/>
+  <xacro:property name="stop_z"      value="0.335"/>   <!-- 지면 0.485 -->
   <xacro:property name="stop_roll"   value="0.0"/>
-  <xacro:property name="stop_pitch"  value="0.0"/>   <!-- 예: +25 -->
+  <xacro:property name="stop_pitch"  value="27.0"/>     <!-- 아래를 보면 양수 -->
   <xacro:property name="stop_yaw"    value="0.0"/>
 
-  <!-- ── BRIO 좌측 (차선유지·콘·주차보조) ───────────────────────────── -->
-  <xacro:property name="left_x"      value="0.000"/>
-  <xacro:property name="left_y"      value="0.000"/>   <!-- 좌측이므로 양수 -->
-  <xacro:property name="left_z"      value="0.000"/>
+  <!-- ── BRIO 좌측 ──────────────────────────────────────────────────── -->
+  <xacro:property name="left_x"      value="0.640"/>
+  <xacro:property name="left_y"      value="0.300"/>
+  <xacro:property name="left_z"      value="0.300"/>   <!-- 지면 0.450 -->
   <xacro:property name="left_roll"   value="0.0"/>
-  <xacro:property name="left_pitch"  value="0.0"/>   <!-- 노면을 보면 양수 -->
-  <xacro:property name="left_yaw"    value="0.0"/>   <!-- 예: +75 -->
+  <xacro:property name="left_pitch"  value="14,0"/>     <!-- 노면을 내려보면 양수 -->
+  <xacro:property name="left_yaw"    value="90.0"/>     <!-- 좌측을 보면 양수 -->
 
   <!-- ── BRIO 우측 ──────────────────────────────────────────────────── -->
-  <xacro:property name="right_x"     value="0.000"/>
-  <xacro:property name="right_y"     value="0.000"/>   <!-- 우측이므로 음수 -->
-  <xacro:property name="right_z"     value="0.000"/>
+  <xacro:property name="right_x"     value="0.640"/>
+  <xacro:property name="right_y"     value="-0.300"/>
+  <xacro:property name="right_z"     value="0.300"/>   <!-- 지면 0.450 -->
   <xacro:property name="right_roll"  value="0.0"/>
-  <xacro:property name="right_pitch" value="0.0"/>
-  <xacro:property name="right_yaw"   value="0.0"/>   <!-- 예: -75 -->
+  <xacro:property name="right_pitch" value="16.0"/>
+  <xacro:property name="right_yaw"   value="-90.0"/>     <!-- 우측을 보면 음수 -->
 
   <!-- ── IMU / GPS ──────────────────────────────────────────────────── -->
-  <xacro:property name="imu_x"  value="0.000"/>
-  <xacro:property name="imu_y"  value="0.000"/>
-  <xacro:property name="imu_z"  value="0.000"/>
-  <xacro:property name="imu_yaw" value="0.0"/>   <!-- IMU 케이스의 x축이 차량 전방과 이루는 각 -->
+  <xacro:property name="imu_x"   value="0.150"/>
+  <xacro:property name="imu_y"   value="0.000"/>
+  <xacro:property name="imu_z"   value="0.350"/>   <!-- 지면 0.500 -->
+  <xacro:property name="imu_yaw" value="0.0"/>
 
-  <xacro:property name="gps_x"  value="0.000"/>  <!-- GPS는 안테나 위상중심 기준 -->
-  <xacro:property name="gps_y"  value="0.000"/>
-  <xacro:property name="gps_z"  value="0.000"/>
+  <!-- GPS = 안테나 위상중심 (수신기 보드 아님) -->
+  <xacro:property name="gps_x"   value="0.200"/>
+  <xacro:property name="gps_y"   value="0.000"/>   <!-- 좌측 15cm -->
+  <xacro:property name="gps_z"   value="1.670"/>   <!-- 지면 1.820 -->
 
   <!-- ▲▲▲ 워크시트 끝 — 아래는 건드릴 필요 없습니다 ▲▲▲ -->
 
