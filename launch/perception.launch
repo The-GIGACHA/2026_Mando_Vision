@@ -6,7 +6,11 @@
   <arg name="tf"            default="true"/>
   <arg name="lane"          default="true"/>
   <arg name="traffic_light" default="true"/>
-  <arg name="cone"          default="true"/>
+  <!-- ★ cone 은 BRIO 좌·우(/cam_left, /cam_right) 를 먹는다. 2026-09-06 에
+       카메라를 2대로 줄이면서 그 두 대를 뺐으므로 입력이 없다.
+       true 로 두면 object_detector 2개가 영영 안 오는 이미지를 기다리며
+       GPU 메모리만 잡는다. BRIO 를 다시 달면 그때 true 로 되돌릴 것. -->
+  <arg name="cone"          default="false"/>
   <arg name="stopline"      default="true"/>
   <arg name="delivery_sign" default="false"/>   <!-- 2026 규정에 없음 -->
   <arg name="monitor"       default="true"/>

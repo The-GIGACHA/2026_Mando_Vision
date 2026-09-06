@@ -65,13 +65,52 @@ ROS 패키지명: **`mando_vision_2026`**
 
 ### 구독
 
-| 토픽 | 용도 |
-|---|---|
-| `/cam_front/color/image_raw/compressed` | 차선, 신호등 (D455) |
-| `/cam_left/image_raw/compressed` | 콘 좌 (BRIO) |
-| `/cam_right/image_raw/compressed` | 콘 우 (BRIO) |
-| `/cam_stopline/image_raw/compressed` | 정지선 (C920 전방 하향) |
-| `/planning/intent` (`String`: `straight`\|`left`) | 모니터 판정 미리보기 |
+| 토픽 | 용도 | 상태 |
+|---|---|---|
+| `/cam_front/color/image_raw/compressed` | 차선, 신호등 (D455) | ✅ |
+| `/cam_stopline/image_raw/compressed` | 정지선 (C920 전방 하향) | ✅ |
+| `/cam_left/image_raw/compressed` | 콘 좌 (BRIO) | ❌ 카메라 뺌 |
+| `/cam_right/image_raw/compressed` | 콘 우 (BRIO) | ❌ 카메라 뺌 |
+| `/planning/intent` (`String`: `straight`\|`left`) | 모니터 판정 미리보기 | ✅ |
+
+## 카메라 구성 — 2026-09-06 부터 2대
+
+허브 하나에 카메라 4대를 물리면 USB 대역폭이 모자라 전송이 밀린다.
+BRIO 좌·우를 빼고 2대로 줄였다. 그래서 `cone.launch` 는 지금 입력이 없고,
+`perception.launch` 의 `cone` 기본값은 `false` 다.
+
+| 이름 | 장치 | serial | 토픽 접두어 | 쓰는 곳 |
+|---|---|---|---|---|
+| `cam_front` | Intel D455 | 238623060437 | `/cam_front` | 차선·신호등·통행가능 |
+| `cam_stopline` | Logitech C920 | FBA4B41F | `/cam_stopline` | 정지선 |
+
+### `/dev` 이름은 serial 로 고정한다
+
+`udev/99-gigacha-cameras.rules` 가 원본이고, `/etc/udev/rules.d/` 로 복사해서 쓴다:
+
+```bash
+sudo install -m 644 udev/99-gigacha-cameras.rules /etc/udev/rules.d/
+sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=video4linux
+ls -l /dev/cam_*
+```
+
+예전 규칙은 물리 포트 경로(`KERNELS=="1-7.3"`)로 잡고 있었다. 카메라를 뽑았다
+꽂거나 허브 포트를 옮기면 경로가 달라져서 심볼릭 링크가 조용히 안 생기고,
+`usb_cam` 노드는 respawn 으로 무한 재시작만 한다 (에러가 아니라 로그 도배로
+나타난다). serial 은 어느 허브 어느 포트에 꽂아도 안 변한다.
+
+> `tools/cam_setup.sh` 는 "BRIO 2대는 VID:PID 가 같아서 물리 포트가 유일한
+> 해법" 이라고 적고 있는데, 이건 **`by-id` 경로 기준으로만 맞다**.
+> `ATTRS{serial}` 은 개체마다 다르다 (BRIO 좌 `BF5AC6D2` / 우 `EBA07419`).
+> 그래서 serial 로 잡으면 포트를 안 고정해도 된다.
+
+### D455 는 한 프로세스만 연다
+
+`cameras.launch d455:=true` 와 `camera_passability/traversability_live.launch`
+를 같이 띄우면 나중 것이 `Device or resource busy` 로 죽는다. 주행 스택에서는
+`traversability_live.launch` 쪽 하나만 쓴다 — 그쪽도 2026-09-06 부터
+`cam_front` 이름으로 띄우므로 토픽 접두어가 이 표와 같다.
+(예전 배그는 `/camera/...` 라서 재생할 때만 `cam_ns:=camera`)
 
 ## 실행
 

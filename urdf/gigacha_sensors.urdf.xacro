@@ -79,7 +79,7 @@
   <xacro:property name="left_y"      value="0.300"/>
   <xacro:property name="left_z"      value="0.300"/>   <!-- 지면 0.450 -->
   <xacro:property name="left_roll"   value="0.0"/>
-  <xacro:property name="left_pitch"  value="14,0"/>     <!-- 노면을 내려보면 양수 -->
+  <xacro:property name="left_pitch"  value="14.0"/>     <!-- 노면을 내려보면 양수 -->
   <xacro:property name="left_yaw"    value="90.0"/>     <!-- 좌측을 보면 양수 -->
 
   <!-- ── BRIO 우측 ──────────────────────────────────────────────────── -->
