@@ -6,12 +6,41 @@ stopline_detector.py — 정지선 검출 (OpenCV)
 발행: /perception/stopline  (std_msgs/String, JSON)
   {"detected": true, "row": 512, "thickness_px": 25, "angle_deg": 4.0,
    "fill": 0.96, "distance_m": 1.85, "crosswalk": false,
-   "votes": 4, "window": 5, "stamp": 1234567.89}
+   "votes": 4, "window": 5,
+   "image_stamp": 1234567.89, "age_ms": 78.3, "stamp": 1234567.97}
 
   row        정지선 근접 모서리의 y 좌표 (원본 이미지 기준, ROI 가로 중앙)
   angle_deg  이미지상 기울기. + = 오른쪽으로 내려감
   distance_m 호모그래피를 설정했을 때만. 아니면 null
   crosswalk  횡단보도로 판단되면 true (이때 detected 는 false)
+  age_ms     이 판정의 원본 영상이 몇 ms 전 것인지  ★ 제동 계산에 필요
+
+────────────────────────────────────────────────────────────────────────
+2026-09-12 수정 (합성 장면 실측으로 확인된 문제들)
+
+ ① tau 를 목록으로 (~taus)
+    DBD 필터는 y±tau 가 '둘 다 어두운 노면' 이어야 응답합니다.
+    정지선이 2*tau 보다 두꺼우면 내부 픽셀은 위아래가 전부 밝아
+    응답이 0 이 됩니다.
+
+    C920(높이 0.485 m, pitch 27도, 640x480) 기준 30cm 정지선의 두께:
+        2.0 m 앞  20 px      1.0 m 앞  58 px
+        1.5 m 앞  31 px      0.8 m 앞  79 px
+                             0.6 m 앞 115 px
+    단일 tau 로는 이 범위를 못 덮습니다. tau=30 이면 1.5 m 밖에서만
+    잡히고, 정작 정밀 정지가 필요한 근거리에서 눈이 멉니다.
+    여러 tau 의 응답 최댓값을 취하면 15~100 px 를 한 번에 덮습니다.
+
+ ② ROI 높이 경고
+    resp 의 위아래 tau 행은 0 으로 지웁니다. ROI 가 얕으면 유효 구간이
+    거의 남지 않습니다. ROI 높이는 tau_max 의 4배 이상으로 잡으세요.
+
+ ③ 원본 영상 타임스탬프 전달
+    기존에는 발행 시각만 실어서 판단팀이 지연을 알 수 없었습니다.
+
+ ④ 호모그래피 축 검사
+    world_points 순서를 하나 어긋나게 적으면 거리가 뒤집히는데
+    아무 경고가 없었습니다. 시동 시 단조성을 확인합니다.
 """
 
 import os
@@ -22,6 +51,7 @@ import numpy as np
 import cv2
 import rospy
 from sensor_msgs.msg import CompressedImage
+
 
 def _add_utils_to_path():
     """utils/ 를 import 경로에 추가합니다.
@@ -60,7 +90,16 @@ class StoplineDetector(object):
             rospy.logfatal("~roi 는 [x1,y1,x2,y2] 4개여야 합니다: %s", self.roi)
             raise SystemExit(1)
 
-        self.tau = int(rospy.get_param("~tau", 30))
+        # ── ① tau 다중 스케일 ────────────────────────────────────
+        taus = rospy.get_param("~taus", None)
+        if taus is None:                       # 구버전 호환
+            taus = [int(rospy.get_param("~tau", 30))]
+        if isinstance(taus, (int, float)):
+            taus = [int(taus)]
+        self.taus = sorted(set(int(t) for t in taus if int(t) > 0))
+        if not self.taus:
+            rospy.logfatal("~taus 가 비었습니다")
+            raise SystemExit(1)
 
         self.min_resp = int(rospy.get_param("~min_response", 25))
 
@@ -74,12 +113,22 @@ class StoplineDetector(object):
 
         self.min_fill = float(rospy.get_param("~min_fill", 0.55))
         self.min_thick = int(rospy.get_param("~min_thickness", 10))
-        self.max_thick = int(rospy.get_param("~max_thickness", 120))
+        self.max_thick = int(rospy.get_param("~max_thickness", 200))
 
-        self.crosswalk_bands = int(rospy.get_param("~crosswalk_min_bands", 3))
+        self.crosswalk_bands = int(rospy.get_param("~crosswalk_min_bands", 4))
 
         self.vote_win = int(rospy.get_param("~vote_window", 5))
         self.vote_min = int(rospy.get_param("~vote_min", 3))
+
+        # ── ② ROI 높이 검사 ──────────────────────────────────────
+        if self.roi:
+            roi_h = int(self.roi[3]) - int(self.roi[1])
+            need = 4 * max(self.taus)
+            if roi_h < need:
+                rospy.logwarn(
+                    "ROI 높이 %d px 가 tau_max(%d) 의 4배(%d) 미만입니다. "
+                    "위아래 %d 행이 무효화돼 실효 검출 구간이 좁습니다.",
+                    roi_h, max(self.taus), need, 2 * max(self.taus))
 
         self.H = self._build_homography(
             rospy.get_param("~image_points", []),
@@ -96,21 +145,38 @@ class StoplineDetector(object):
 
         rospy.Timer(rospy.Duration(1.0 / self.rate_hz), self.step)
         rospy.Timer(rospy.Duration(5.0), self.watchdog)
-        rospy.loginfo("stopline_detector 준비 완료 (%.0f Hz, 각도탐색 %d개, 거리환산=%s)",
-                      self.rate_hz, len(self.angles),
+        rospy.loginfo("stopline_detector 준비 완료 "
+                      "(%.0f Hz, taus=%s, 각도탐색 %d개, 거리환산=%s)",
+                      self.rate_hz, self.taus, len(self.angles),
                       "ON" if self.H is not None else "OFF")
 
+    # ── 호모그래피 ───────────────────────────────────────────────
     def _build_homography(self, img_pts, wld_pts):
         if not img_pts or not wld_pts:
-            rospy.logwarn("~image_points/~world_points 미설정 — distance_m 은 null 로 나갑니다")
+            rospy.logwarn("~image_points/~world_points 미설정 — "
+                          "distance_m 은 null 로 나갑니다")
             return None
         if len(img_pts) != 4 or len(wld_pts) != 4:
             rospy.logfatal("~image_points 와 ~world_points 는 각각 4점이어야 합니다")
             raise SystemExit(1)
         src = np.array(img_pts, dtype=np.float32)
         dst = np.array(wld_pts, dtype=np.float32)
+
+        # ④ 축 검사 — 화면 아래쪽 점이 더 '가까운' 거리로 가야 정상
+        order = np.argsort(src[:, 1])          # 화면 위 -> 아래
+        far = float(dst[order[:2], 0].mean())
+        near = float(dst[order[2:], 0].mean())
+        if not near < far:
+            rospy.logfatal(
+                "호모그래피 축이 뒤집혔습니다 (화면 아래쪽이 더 먼 거리로 매핑). "
+                "~world_points 의 첫 성분이 종방향 거리(m)인지, "
+                "점 순서가 ~image_points 와 같은지 확인하세요. "
+                "위쪽2점 평균=%.2f, 아래쪽2점 평균=%.2f", far, near)
+            raise SystemExit(1)
+
         H = cv2.getPerspectiveTransform(src, dst)
-        rospy.loginfo("호모그래피 설정 완료 — 거리(m)를 발행합니다")
+        rospy.loginfo("호모그래피 설정 완료 — 거리(m)를 발행합니다 "
+                      "(아래쪽 %.2f m ~ 위쪽 %.2f m)", near, far)
         return H
 
     def _to_ground(self, u, v):
@@ -120,6 +186,7 @@ class StoplineDetector(object):
         q = cv2.perspectiveTransform(p, self.H)[0][0]
         return round(float(q[0]), 3)
 
+    # ── 전처리 ───────────────────────────────────────────────────
     def crop(self, img):
         if not self.roi:
             return img, (0, 0)
@@ -139,19 +206,30 @@ class StoplineDetector(object):
         ★ 절대 밝기가 아니라 '위아래와의 차이'만 봅니다.
           → 그늘이든 역광이든 노면 대비 밝은 띠면 응답이 나옵니다.
         ★ 마지막 절대값 항이 '한쪽만 어두운' 경우를 걸러냅니다.
-          (예: 노면→그림자 경계는 위아래 밝기가 비대칭이라 응답이 상쇄됨)
+          (노면→그림자 경계는 위아래 밝기가 비대칭이라 응답이 상쇄됨.
+           진행방향과 평행한 횡단보도 줄무늬도 여기서 원천 억제됩니다)
+        ★ tau 여러 개의 최댓값을 취해 두께 범위를 넓게 덮습니다.
         """
         g = gray.astype(np.int16)
-        up = np.roll(g, self.tau, axis=0)
-        dn = np.roll(g, -self.tau, axis=0)
-        resp = 2 * g - up - dn - np.abs(up - dn)
-        resp[:self.tau, :] = 0
-        resp[-self.tau:, :] = 0
-        return np.clip(resp, 0, 255).astype(np.uint8)
+        acc = None
+        for tau in self.taus:
+            if 2 * tau >= g.shape[0]:          # ROI 보다 큰 tau 는 건너뜀
+                continue
+            up = np.roll(g, tau, axis=0)
+            dn = np.roll(g, -tau, axis=0)
+            r = 2 * g - up - dn - np.abs(up - dn)
+            r[:tau, :] = 0
+            r[-tau:, :] = 0
+            acc = r if acc is None else np.maximum(acc, r)
+        if acc is None:
+            return np.zeros_like(gray)
+        return np.clip(acc, 0, 255).astype(np.uint8)
 
     def _marking_mask(self, gray):
         resp = self._dbd(gray)
         th, _ = cv2.threshold(resp, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # Otsu 는 정지선이 없을 때 노이즈 한가운데를 임계로 잡습니다.
+        # min_response 가 그 바닥을 막아줍니다.
         th = max(th, float(self.min_resp))
         _, m = cv2.threshold(resp, th, 255, cv2.THRESH_BINARY)
         if self.open_w > 1:
@@ -214,14 +292,18 @@ class StoplineDetector(object):
                 bands.append((y0, y1, float(fill[y0:y1 + 1].mean())))
         return bands, fill
 
+    # ── 주기 ─────────────────────────────────────────────────────
     def step(self, _evt):
-        img, _hdr = self.frame.take()
+        img, hdr = self.frame.take()
         if img is None:
             self.votes.append(False)
             self.emit(None, False)
             return
 
         meas, crosswalk, dbg = self.detect(img)
+        if meas is not None:
+            # ③ 판정에 쓰인 '원본 영상' 시각을 같이 들고 다닙니다
+            meas["image_stamp"] = hdr.stamp.to_sec() if hdr is not None else None
         self.votes.append(meas is not None)
         self.emit(meas, crosswalk)
 
@@ -265,12 +347,22 @@ class StoplineDetector(object):
         d = {"detected": bool(stable), "crosswalk": bool(crosswalk),
              "votes": n, "window": self.vote_win,
              "row": None, "thickness_px": None, "angle_deg": None,
-             "fill": None, "distance_m": None}
+             "fill": None, "distance_m": None,
+             "image_stamp": None, "age_ms": None}
+
         if stable and self.last is not None:
             for k in ("row", "thickness_px", "angle_deg", "fill", "distance_m"):
                 d[k] = self.last[k]
+            st = self.last.get("image_stamp")
+            d["image_stamp"] = st
+            if st:
+                # ★ 다수결 때문에 최대 (window - vote_min) 프레임 낡은 값이
+                #   나갈 수 있습니다. 판단팀이 그 지연을 알아야 합니다.
+                d["age_ms"] = round(
+                    (rospy.Time.now().to_sec() - st) * 1000.0, 1)
         self.out.publish(d)
 
+    # ── 시각화 ───────────────────────────────────────────────────
     def publish_viz(self, img, meas, crosswalk, dbg):
         mask = dbg["mask"]
         ox, oy = dbg["off"]
@@ -286,6 +378,7 @@ class StoplineDetector(object):
                           (int(self.roi[2]), int(self.roi[3])), (255, 0, 255), 2)
 
         m = np.tan(np.radians(dbg["angle"]))
+
         def line_at(row):
             y_l = int(round(row + m * (0 - w / 2.0))) + oy
             y_r = int(round(row + m * (w - 1 - w / 2.0))) + oy
@@ -311,8 +404,8 @@ class StoplineDetector(object):
                         (ox + 5, oy + 25), cv2.FONT_HERSHEY_SIMPLEX,
                         0.7, (0, 165, 255), 2, cv2.LINE_AA)
 
-        cv2.putText(vis, "otsu=%.0f  shear=%.0fdeg  bands=%d"
-                    % (dbg["th"], dbg["angle"], len(dbg["bands"])),
+        cv2.putText(vis, "otsu=%.0f  shear=%.0fdeg  bands=%d  taus=%s"
+                    % (dbg["th"], dbg["angle"], len(dbg["bands"]), self.taus),
                     (10, vis.shape[0] - 12), cv2.FONT_HERSHEY_SIMPLEX,
                     0.5, (200, 200, 200), 1, cv2.LINE_AA)
 

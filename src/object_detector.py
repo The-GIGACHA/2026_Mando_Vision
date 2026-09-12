@@ -30,6 +30,7 @@ object_detector.py — 콘 / 배달표지판 공용 YOLO 검출 노드 (2026)
 """
 
 import os
+import re
 import sys
 
 import numpy as np
@@ -111,8 +112,13 @@ class ObjectDetector(object):
 
         self.frame = LatestFrame(topic)
         self.pub = rospy.Publisher(out_topic, Detection2DArray, queue_size=1)
+        # ★ rstrip 은 '접미사'가 아니라 '문자 집합'을 제거합니다.
+        #   "/perception/cone/detections".rstrip("/detections")
+        #     -> "/percep"        (뒤에서부터 /,d,e,t,c,i,o,n,s 를 계속 깎음)
+        #   그래서 시각화 토픽이 "/percep/viz/compressed" 가 됐습니다.
+        viz_base = re.sub(r"/detections$", "", out_topic)
         self.viz_pub = rospy.Publisher(
-            "%s/viz/compressed" % out_topic.rstrip("/detections"),
+            "%s/viz/compressed" % viz_base,
             CompressedImage, queue_size=1)
         self.viz_throttle = Throttle(self.viz_hz)
 

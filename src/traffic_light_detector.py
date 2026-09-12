@@ -70,6 +70,9 @@ class TrafficLightDetector(object):
         self.vote_win = int(rospy.get_param("~vote_window", 5))
         self.vote_min = int(rospy.get_param("~vote_min", 3))
         self.viz_hz = rospy.get_param("~viz_hz", 5.0)
+        # ★ Ultralytics predict 기본값은 640 입니다. 학습 해상도와 다르면
+        #   에러 없이 작은 객체만 조용히 안 잡힙니다. 명시적으로 넘깁니다.
+        self.imgsz = int(rospy.get_param("~imgsz", 640))
         topic = rospy.get_param("~image_topic", "/cam_front/color/image_raw/compressed")
 
         # ROI: [x1, y1, x2, y2] 원본 이미지 기준. 빈 리스트면 전체.
@@ -117,7 +120,8 @@ class TrafficLightDetector(object):
 
         rospy.Timer(rospy.Duration(1.0 / self.infer_hz), self.step)
         rospy.Timer(rospy.Duration(5.0), self.watchdog)
-        rospy.loginfo("traffic_light_detector 준비 완료 (%.0f Hz)", self.infer_hz)
+        rospy.loginfo("traffic_light_detector 준비 완료 (%.0f Hz, imgsz=%d)",
+                      self.infer_hz, self.imgsz)
 
     # ── ROI ──────────────────────────────────────────────────────────
     def crop(self, img):
@@ -140,6 +144,7 @@ class TrafficLightDetector(object):
 
         roi_img, (ox, oy) = self.crop(img)
         res = self.model.predict(roi_img, conf=self.conf_th,
+                                 imgsz=self.imgsz,
                                  device=self.device, verbose=False)[0]
 
         label, conf, box = None, 0.0, None
