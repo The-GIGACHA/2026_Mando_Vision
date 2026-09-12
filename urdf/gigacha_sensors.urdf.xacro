@@ -60,7 +60,12 @@
 
   <!-- ── D455 (전방 상향) ───────────────────────────────────────────── -->
   <xacro:property name="front_x"     value="0.725"/>
-  <xacro:property name="front_y"     value="-0.060"/>
+  <!-- ★ 이 값은 D455 의 camera_link(= 좌측 IR) 기준이지 RGB 렌즈가 아니다.
+       드라이버가 camera_link -> color_optical 로 y=-0.059 를 더 발행하므로,
+       RGB 렌즈 실측 -0.060 에서 그만큼 되돌린 값을 여기 넣어야
+       최종 color_optical 이 실측 위치에 놓인다.
+       확인:  rosrun tf tf_echo base_link cam_front_color_optical_frame  -> y = -0.060 -->
+  <xacro:property name="front_y"     value="-0.001"/>   <!-- RGB 실측 -0.060 + 드라이버 0.059 -->
   <xacro:property name="front_z"     value="0.850"/>   <!-- 지면 1.000 -->
   <xacro:property name="front_roll"  value="0.0"/>
   <xacro:property name="front_pitch" value="-1.0"/>     <!-- 현장에서 확정, 위를 보면 음수 -->
