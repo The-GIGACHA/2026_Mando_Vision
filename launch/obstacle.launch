@@ -1,0 +1,52 @@
+<launch>
+  <!-- 장애물 + 신호제어차량 지시 (obstacle.pt)
+
+       roslaunch mando_vision_2026 obstacle.launch
+       rqt_image_view /perception/obstacle/viz/compressed
+       rostopic echo /perception/sign_car
+  -->
+  <arg name="image"  default="/cam_front/color/image_raw/compressed"/>
+  <arg name="model"  default="$(find mando_vision_2026)/weights/obstacle.pt"/>
+  <arg name="imgsz"  default="960"/>
+  <arg name="hz"     default="15"/>
+
+  <node pkg="mando_vision_2026" type="obstacle_detector.py"
+        name="obstacle_detector" output="screen" respawn="true">
+
+    <param name="image_topic" value="$(arg image)"/>
+    <param name="model"       value="$(arg model)"/>
+
+    <!-- ★ 학습할 때 쓴 값과 반드시 같아야 합니다.
+         960 으로 학습하고 640 으로 추론하면 패널이 25.7px -> 17px 로
+         줄어 조용히 안 잡힙니다. 에러가 안 나서 알아채기 어렵습니다. -->
+    <param name="imgsz"   value="$(arg imgsz)"/>
+
+    <param name="rate_hz" value="$(arg hz)"/>
+    <param name="viz_hz"  value="5"/>
+
+    <!-- 모델 자체의 1차 임계. 여기서 너무 높이면 아래 비대칭 임계가
+         의미를 잃습니다. 낮게 두고 sign/* 에서 거르세요. -->
+    <param name="conf"    value="0.20"/>
+
+    <!-- ══ 신호제어차량 판정 ══════════════════════════════════════
+         ↓(go) 는 초록 화살표라 형태·색이 뚜렷하고,
+         X 는 붉은 사선이라 배경의 붉은 구조물과 섞입니다.
+         그래서 임계를 비대칭으로 주고, ↓ 가 하나라도 있으면
+         X 는 아예 보지 않습니다.                                  -->
+    <param name="sign/conf_go" value="0.25"/>
+    <param name="sign/conf_x"  value="0.45"/>
+
+    <!-- 차체 게이트 — '화면 끝에서 뜨는' 오검출을 잡는 핵심 장치.
+         패널은 차 몸통에 붙어 있으므로 traffic_car 박스 밖의
+         패널 검출은 버립니다.
+         차체를 자주 놓쳐서 지시가 안 나오면 require_host 를 false 로
+         내리되, 그만큼 오검출이 늘어납니다.                        -->
+    <param name="sign/require_host" value="true"/>
+    <param name="sign/host_margin"  value="0.12"/>
+    <param name="sign/min_inside"   value="0.60"/>
+
+    <!-- 시간 다수결 -->
+    <param name="sign/vote_window" value="7"/>
+    <param name="sign/vote_min"    value="4"/>
+  </node>
+</launch>

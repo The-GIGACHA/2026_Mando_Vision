@@ -11,3 +11,11 @@ __pycache__/
 .DS_Store
 *.bag
 *.mp4
+
+# 학습·검증 산출물 (저장소에 넣지 않습니다)
+datasets/
+runs/
+videos/
+live_check_shots/
+frames_out/
+.env
