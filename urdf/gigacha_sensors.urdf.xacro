@@ -59,19 +59,19 @@
   <xacro:property name="lidar_yaw"   value="0.0"/>
 
   <!-- ── D455 (전방 상향) ───────────────────────────────────────────── -->
-  <xacro:property name="front_x"     value="0.750"/>
-  <xacro:property name="front_y"     value="0.000"/>
-  <xacro:property name="front_z"     value="0.520"/>   <!-- 지면 0.670 -->
+  <xacro:property name="front_x"     value="0.725"/>
+  <xacro:property name="front_y"     value="-0.060"/>
+  <xacro:property name="front_z"     value="0.850"/>   <!-- 지면 1.000 -->
   <xacro:property name="front_roll"  value="0.0"/>
-  <xacro:property name="front_pitch" value="0.0"/>     <!-- 현장에서 확정, 위를 보면 음수 -->
+  <xacro:property name="front_pitch" value="-1.0"/>     <!-- 현장에서 확정, 위를 보면 음수 -->
   <xacro:property name="front_yaw"   value="0.0"/>
 
   <!-- ── C920 (전방 하향 / 정지선) ──────────────────────────────────── -->
-  <xacro:property name="stop_x"      value="0.800"/>
-  <xacro:property name="stop_y"      value="0.000"/>
-  <xacro:property name="stop_z"      value="0.335"/>   <!-- 지면 0.485 -->
+  <xacro:property name="stop_x"      value="0.760"/>
+  <xacro:property name="stop_y"      value="-0.060"/>
+  <xacro:property name="stop_z"      value="0.680"/>   <!-- 지면 0.830 -->
   <xacro:property name="stop_roll"   value="0.0"/>
-  <xacro:property name="stop_pitch"  value="27.0"/>     <!-- 아래를 보면 양수 -->
+  <xacro:property name="stop_pitch"  value="28.0"/>     <!-- 아래를 보면 양수 -->
   <xacro:property name="stop_yaw"    value="0.0"/>
 
   <!-- ── BRIO 좌측 ──────────────────────────────────────────────────── -->
