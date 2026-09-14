@@ -30,17 +30,36 @@ object_detector.py — 콘 / 배달표지판 공용 YOLO 검출 노드 (2026)
 """
 
 import os
+import re
 import sys
 
 import numpy as np
 import cv2
+def _add_utils_to_path():
+    """utils/ 를 import 경로에 추가합니다.
+
+    catkin_install_python 이 스크립트를 devel/lib/<pkg>/ 로 복사하므로
+    __file__ 기준 "../utils" 는 그곳에서 존재하지 않습니다.
+    소스 트리에서 실행할 때는 상대경로, 그 외에는 rospkg 로 찾습니다."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    cand = os.path.join(here, "..", "utils")
+    if not os.path.isdir(cand):
+        import rospkg
+        cand = os.path.join(
+            rospkg.RosPack().get_path("mando_vision_2026"), "utils")
+    if cand not in sys.path:
+        sys.path.insert(0, cand)
+
+
+_add_utils_to_path()
+
 import rospy
 from sensor_msgs.msg import CompressedImage
 from vision_msgs.msg import (Detection2DArray, Detection2D,
                              BoundingBox2D, ObjectHypothesisWithPose)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_HERE, "..", "utils"))
+
 import class_map                                              # noqa: E402
 from infer_loop import LatestFrame, Throttle                  # noqa: E402
 
@@ -93,8 +112,13 @@ class ObjectDetector(object):
 
         self.frame = LatestFrame(topic)
         self.pub = rospy.Publisher(out_topic, Detection2DArray, queue_size=1)
+        # ★ rstrip 은 '접미사'가 아니라 '문자 집합'을 제거합니다.
+        #   "/perception/cone/detections".rstrip("/detections")
+        #     -> "/percep"        (뒤에서부터 /,d,e,t,c,i,o,n,s 를 계속 깎음)
+        #   그래서 시각화 토픽이 "/percep/viz/compressed" 가 됐습니다.
+        viz_base = re.sub(r"/detections$", "", out_topic)
         self.viz_pub = rospy.Publisher(
-            "%s/viz/compressed" % out_topic.rstrip("/detections"),
+            "%s/viz/compressed" % viz_base,
             CompressedImage, queue_size=1)
         self.viz_throttle = Throttle(self.viz_hz)
 

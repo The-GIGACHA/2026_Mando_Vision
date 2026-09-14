@@ -1,17 +1,14 @@
 <launch>
   <!-- 정지선 검출 — 전방 하향 웹캠 (cam_stopline / C920)
 
-       ★ 기본값은 1280x720 기준의 출발점일 뿐입니다.
-         차량에 장착한 뒤 아래 "튜닝 순서"대로 실제 영상을 보고 맞추세요.
+       ★ 기본값은 출발점일 뿐입니다. 차량에 장착한 뒤 실제 영상을 보고 맞추세요.
          rqt_image_view /perception/stopline/viz/compressed
 
        ── 튜닝 순서 (이 순서가 중요합니다) ────────────────────────────
         1. roi   : 노면만, 가로폭은 차로폭에 맞춰 (넓으면 채움률이 떨어짐)
-        2. tau   : 영상에서 정지선 두께를 픽셀로 재고 그보다 조금 크게
-                   ★ 두께의 '절반'이 아닙니다. 작으면 아예 안 잡힙니다
-        3. min/max_thickness : viz 에 찍히는 t=NNpx 값을 보고 그 주변으로
-                   ※ 보고되는 두께는 실제 페인트보다 20~30% 작게 나옵니다
-                     (DBD 응답이 띠 가장자리에서 완만해지기 때문)
+                   ★ 높이는 tau_max 의 4배 이상 (아래 taus 참고)
+        2. taus  : 영상에서 정지선 두께를 픽셀로 재고 그 범위를 덮도록
+        3. min/max_thickness : viz 의 t=NNpx 값을 보고 그 주변으로
         4. min_fill : 정지선이 ROI 가로를 얼마나 채우는지 보고
         5. min_response : 오검출이 남으면 올리고, 미검출이면 내리고
   -->
@@ -25,13 +22,30 @@
     <param name="rate_hz"     value="$(arg hz)"/>
     <param name="viz_hz"      value="5"/>
 
-    <!-- ① ROI [x1,y1,x2,y2] 원본 픽셀. 비우면 전체 -->
+    <!-- ① ROI [x1,y1,x2,y2] 원본 픽셀. 비우면 전체
+         ★ 640x480 기준입니다 (cameras.launch 의 stopline_height=480) -->
     <rosparam param="roi">[]</rosparam>
 
-    <!-- ② DBD 필터: 예상 정지선 두께(px)보다 조금 크게 -->
-    <param name="tau" value="30"/>
+    <!-- ② ★ DBD 필터의 tau 목록 — 이 노드에서 가장 중요한 값
 
-    <!-- ③ 이진화 최소 응답 (Otsu 가 이보다 낮게는 못 내려감) -->
+         DBD 는 y±tau 가 '둘 다 어두운 노면' 이어야 응답합니다.
+         정지선이 2*tau 보다 두꺼우면 내부 픽셀은 위아래가 전부 밝아
+         응답이 0 이 되어 아무것도 안 잡힙니다.
+
+         C920(지면 0.485 m, pitch 27도, 640x480) 기준 30cm 정지선 두께:
+             2.0 m 앞  20 px        1.0 m 앞  58 px
+             1.5 m 앞  31 px        0.8 m 앞  79 px
+                                    0.6 m 앞 115 px
+
+         즉 접근하면서 두께가 20 -> 115 px 로 변합니다.
+         단일 tau 로는 절대 못 덮습니다. tau=30 하나만 쓰면
+         1.5 m 밖에서만 잡히고 정작 정밀 정지 구간에서 눈이 멉니다.
+
+         ★ 실제 영상에서 두께를 먼저 재고 이 목록을 조정하세요.       -->
+    <rosparam param="taus">[20, 45, 80]</rosparam>
+
+    <!-- ③ 이진화 최소 응답 (Otsu 가 이보다 낮게는 못 내려감)
+         정지선이 없을 때 Otsu 가 노이즈 한가운데를 임계로 잡는 것을 막습니다 -->
     <param name="min_response" value="25"/>
 
     <!-- ④ 모폴로지 — 열기(잡음 제거) 후 닫기(페인트 구멍 메우기) -->
@@ -42,13 +56,17 @@
     <param name="max_angle_deg"  value="20"/>
     <param name="angle_step_deg" value="2"/>
 
-    <!-- ⑥ 형상 검증 -->
+    <!-- ⑥ 형상 검증
+         max_thickness 를 200 으로 올린 이유: 근거리에서 정지선이
+         115 px 까지 두꺼워지는데 120 이면 걸러버립니다. -->
     <param name="min_fill"      value="0.55"/>
     <param name="min_thickness" value="10"/>
-    <param name="max_thickness" value="120"/>
+    <param name="max_thickness" value="200"/>
 
-    <!-- ⑦ 횡단보도 판별: 조건을 만족하는 띠가 이 개수 이상이면 정지선 아님 -->
-    <param name="crosswalk_min_bands" value="3"/>
+    <!-- ⑦ 횡단보도 판별: 조건을 만족하는 띠가 이 개수 이상이면 정지선 아님
+         max_thickness 를 올렸으므로 4 로 같이 올립니다.
+         (정지선 + 차선 + 화살표가 3개를 만들어 오인하는 것을 방지) -->
+    <param name="crosswalk_min_bands" value="4"/>
 
     <!-- ⑧ 시간 안정화 -->
     <param name="vote_window" value="5"/>
@@ -62,7 +80,10 @@
          world_points 는 차량 기준: X=전방(m), Y=좌측(m)
          네 점은 가급적 넓게 (가까이 2점 + 멀리 2점) 잡으세요.
 
-      <rosparam param="image_points">[[420,690],[860,690],[520,430],[760,430]]</rosparam>
+         ★ 시동 시 축 검사를 합니다. 화면 아래쪽 점이 더 먼 거리로
+           매핑되면 순서가 틀린 것이라 노드가 죽으면서 알려줍니다.
+
+      <rosparam param="image_points">[[180,430],[460,430],[240,300],[400,300]]</rosparam>
       <rosparam param="world_points">[[0.60,0.25],[0.60,-0.25],[1.80,0.25],[1.80,-0.25]]</rosparam>
     -->
     <rosparam param="image_points">[]</rosparam>

@@ -1,4 +1,11 @@
 <launch>
+  <!-- ⚠ 2026-09-06 현재 이 launch 는 동작하지 않는다.
+       입력인 BRIO 좌·우(/cam_left, /cam_right)를 뺐다 — 허브에 카메라 4대를
+       물리면 USB 대역폭이 모자라 전송이 밀려서, cam_front(D455) + cam_stopline
+       2대 구성으로 줄였다. 노드는 뜨지만 이미지가 영영 안 온다.
+       BRIO 를 다시 달면 udev/99-gigacha-cameras.rules 에 serial 을 넣고
+       cameras.launch 에 노드를 되살린 뒤 perception.launch 의
+       cone 기본값을 true 로 돌릴 것. -->
   <!-- 콘 검출 — 좌/우 BRIO. ★ 카메라 1대당 노드 1개 (2025 는 한 노드에서
        3대를 순차 처리해 지연이 3배였습니다) -->
   <arg name="hz" default="10"/>

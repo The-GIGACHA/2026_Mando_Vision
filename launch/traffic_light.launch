@@ -3,6 +3,11 @@
   <arg name="image" default="/cam_front/color/image_raw/compressed"/>
   <arg name="hz"    default="10"/>
 
+  <!-- ★ 학습 imgsz = TensorRT export imgsz = 런타임 imgsz 세 군데가
+       같아야 합니다. 어긋나도 에러가 안 나고 작은 객체만 조용히
+       안 잡힙니다. 신호등 모델은 640 으로 학습됐습니다. -->
+  <arg name="imgsz" default="640"/>
+
   <node pkg="mando_vision_2026" type="traffic_light_detector.py"
         name="traffic_light_detector" output="screen" respawn="true">
     <param name="weights"
@@ -10,6 +15,7 @@
     <param name="image_topic" value="$(arg image)"/>
     <param name="confidence"  value="0.5"/>
     <param name="infer_hz"    value="$(arg hz)"/>
+    <param name="imgsz"       value="$(arg imgsz)"/>
     <param name="vote_window" value="5"/>
     <param name="vote_min"    value="3"/>
 

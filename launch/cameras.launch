@@ -1,28 +1,47 @@
 <launch>
   <!-- ════════════════════════════════════════════════════════════════════
-       USB 웹캠 3대 기동 (BRIO 좌·우, C920 정지선)
+       USB 웹캠 기동 — 2026-09-06 부터 2대 구성
+
+         cam_front     Intel D455        전방 (컬러 + 정렬깊이 + IMU)
+         cam_stopline  Logitech C920     하향, 정지선 (규정 3·5번)
+
+       ★ 4대 → 2대로 줄인 이유
+         허브 하나에 4대를 물리면 USB 대역폭이 모자라 전송이 밀린다.
+         BRIO 좌·우(cone 검출용)를 뺐다. cone.launch 는 지금 입력이 없다.
+
+       ★ cam_front(D455) 는 여기서 안 띄운다 — 기본값 d455:=false
+         실제 주행 스택은 camera_passability/traversability_live.launch 가
+         realsense2_camera 를 띄운다. 그쪽도 2026-09-06 부터 cam_front 이름을
+         쓰므로 토픽 접두어는 여기와 같다 (/cam_front/...).
+         D455 는 한 프로세스만 열 수 있다. 여기서 또 띄우면 나중에 뜬 쪽이
+             "Device or resource busy" / "failed to set power state"
+         로 죽는다. 아래 d455:=true 는 traversability 를 안 띄우고
+         카메라만 볼 때(캘리브·화각 확인)만 쓸 것.
 
        ★ 노드 이름 = 토픽 접두어
-         usb_cam_node 는 자기 노드의 private 네임스페이스에 발행합니다.
-         따라서 <node name="cam_left"> 면 /cam_left/image_raw 가 됩니다.
-         <group ns="cam_left"> 로 감싸면 /cam_left/usb_cam/image_raw 가 되어
-         인지 노드가 구독하는 경로와 어긋납니다. 감싸지 마세요.
+         usb_cam_node 는 자기 노드의 private 네임스페이스에 발행한다.
+         <node name="cam_stopline"> 면 /cam_stopline/image_raw 가 된다.
+         <group ns="..."> 로 감싸면 /cam_stopline/usb_cam/image_raw 가 되어
+         구독 경로와 어긋난다. 감싸지 마라.
 
-       ★ v4l2 설정은 재연결하면 초기화됩니다
+       ★ v4l2 설정은 재연결하면 초기화된다
          케이블을 뽑았다 꽂거나, 허브 스위치를 껐다 켜거나, 절전에서 깨어나면
-         노출·초점·화이트밸런스가 공장 기본값(자동)으로 돌아갑니다.
-         자동 노출이 켜지면 저조도에서 프레임률이 30 → 7 로 떨어집니다.
-         그래서 v4l2-ctl 로 미리 걸지 않고 이 노드가 직접 설정하게 둡니다.
-         노드를 재시작하면 아래 값이 항상 다시 적용됩니다.
+         노출·초점·화이트밸런스가 공장 기본값(자동)으로 돌아간다.
+         자동 노출이 켜지면 저조도에서 프레임률이 30 → 7 로 떨어진다.
+         그래서 v4l2-ctl 로 미리 걸지 않고 이 노드가 직접 설정하게 둔다.
+         노드를 재시작하면 아래 값이 항상 다시 적용된다.
 
        ★ 노출 단위 = 100 마이크로초
          exposure=200  → 20 ms  → 최대 50 fps   (실내)
          exposure=40   →  4 ms  → 최대 250 fps  (야외 주간)
-         야외는 실내보다 광량이 100배 이상이라 반드시 다시 튜닝해야 합니다.
+         야외는 실내보다 광량이 100배 이상이라 반드시 다시 튜닝할 것.
+
+       ★ /dev/cam_stopline 이 없으면 이 노드는 respawn 으로 무한 재시작한다
+         (에러로 멈추지 않고 로그 도배로만 나타난다). 먼저 확인:
+             ls -l /dev/cam_stopline
+         없으면 udev/99-gigacha-cameras.rules 를 /etc 에 깔았는지 볼 것.
        ════════════════════════════════════════════════════════════════════ -->
 
-  <arg name="width"    default="1280"/>
-  <arg name="height"   default="720"/>
   <arg name="fps"      default="30"/>
   <arg name="exposure" default="200"/>   <!-- 야외: 20~60 -->
   <arg name="gain"     default="150"/>   <!-- 야외: 0~50 -->
@@ -30,49 +49,9 @@
   <arg name="stopline_width"  default="640"/>
   <arg name="stopline_height" default="480"/>
 
-  <!-- ── BRIO 좌측 : 차선유지 · 콘 · 주차 보조 ────────────────────────── -->
-  <node name="cam_left" pkg="usb_cam" type="usb_cam_node"
-        output="screen" respawn="true" respawn_delay="2">
-    <param name="video_device"       value="/dev/cam_left"/>
-    <param name="camera_name"        value="cam_left"/>
-    <param name="camera_frame_id"    value="cam_left_optical_frame"/>
-    <param name="pixel_format"       value="mjpeg"/>
-    <param name="io_method"          value="mmap"/>
-    <param name="image_width"        value="$(arg width)"/>
-    <param name="image_height"       value="$(arg height)"/>
-    <param name="framerate"          value="$(arg fps)"/>
-    <param name="autofocus"          value="false"/>
-    <param name="focus"              value="0"/>
-    <param name="autoexposure"       value="false"/>
-    <param name="exposure"           value="$(arg exposure)"/>
-    <param name="auto_white_balance" value="false"/>
-    <param name="white_balance"      value="$(arg wb)"/>
-    <param name="gain"               value="$(arg gain)"/>
-  </node>
-
-  <!-- ── BRIO 우측 ────────────────────────────────────────────────────── -->
-  <node name="cam_right" pkg="usb_cam" type="usb_cam_node"
-        output="screen" respawn="true" respawn_delay="2">
-    <param name="video_device"       value="/dev/cam_right"/>
-    <param name="camera_name"        value="cam_right"/>
-    <param name="camera_frame_id"    value="cam_right_optical_frame"/>
-    <param name="pixel_format"       value="mjpeg"/>
-    <param name="io_method"          value="mmap"/>
-    <param name="image_width"        value="$(arg width)"/>
-    <param name="image_height"       value="$(arg height)"/>
-    <param name="framerate"          value="$(arg fps)"/>
-    <param name="autofocus"          value="false"/>
-    <param name="focus"              value="0"/>
-    <param name="autoexposure"       value="false"/>
-    <param name="exposure"           value="$(arg exposure)"/>
-    <param name="auto_white_balance" value="false"/>
-    <param name="white_balance"      value="$(arg wb)"/>
-    <param name="gain"               value="$(arg gain)"/>
-  </node>
-
   <!-- ── C920 하향 : 정지선 (규정 3·5번) ──────────────────────────────
-       정지선은 굵은 흰 띠라 해상도가 거의 필요 없습니다.
-       640x480 으로 두어 USB2 버스와 CPU 를 아낍니다.                    -->
+       정지선은 굵은 흰 띠라 해상도가 거의 필요 없다.
+       640x480 으로 두어 USB 버스와 CPU 를 아낀다.                      -->
   <node name="cam_stopline" pkg="usb_cam" type="usb_cam_node"
         output="screen" respawn="true" respawn_delay="2">
     <param name="video_device"       value="/dev/cam_stopline"/>
@@ -92,10 +71,13 @@
     <param name="gain"               value="$(arg gain)"/>
   </node>
 
-  <!-- ── D455 (선택) ──────────────────────────────────────────────────
-       기본 비활성. realsense2_camera 를 따로 띄우거나 d455:=true 로 포함.
+  <!-- ── D455 (기본 꺼짐) ─────────────────────────────────────────────
+       카메라만 단독으로 볼 때:
+           roslaunch mando_vision_2026 cameras.launch d455:=true
+       토픽이 /cam_front/... 로 나온다. 주행 스택(/camera/...)과 이름이
+       다르므로, 이걸 켜놓고 traversability 를 띄우지 말 것.
        initial_reset 은 이전 세션이 깨끗하게 안 닫혔을 때 생기는
-       "Resource temporarily unavailable" 을 예방합니다.                 -->
+       "Resource temporarily unavailable" 을 예방한다.                  -->
   <arg name="d455"       default="false"/>
   <arg name="d455_depth" default="true"/>
 

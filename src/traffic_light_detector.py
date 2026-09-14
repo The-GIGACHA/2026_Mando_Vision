@@ -28,10 +28,27 @@ from collections import deque, Counter
 
 import numpy as np
 import cv2
+def _add_utils_to_path():
+    """utils/ 를 import 경로에 추가합니다.
+
+    catkin_install_python 이 스크립트를 devel/lib/<pkg>/ 로 복사하므로
+    __file__ 기준 "../utils" 는 그곳에서 존재하지 않습니다.
+    소스 트리에서 실행할 때는 상대경로, 그 외에는 rospkg 로 찾습니다."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    cand = os.path.join(here, "..", "utils")
+    if not os.path.isdir(cand):
+        import rospkg
+        cand = os.path.join(
+            rospkg.RosPack().get_path("mando_vision_2026"), "utils")
+    if cand not in sys.path:
+        sys.path.insert(0, cand)
+
+
+_add_utils_to_path()
+
 import rospy
 from sensor_msgs.msg import CompressedImage
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "utils"))
 import class_map                                    # noqa: E402
 from infer_loop import LatestFrame, HeartbeatPublisher, Throttle   # noqa: E402
 
@@ -53,6 +70,9 @@ class TrafficLightDetector(object):
         self.vote_win = int(rospy.get_param("~vote_window", 5))
         self.vote_min = int(rospy.get_param("~vote_min", 3))
         self.viz_hz = rospy.get_param("~viz_hz", 5.0)
+        # ★ Ultralytics predict 기본값은 640 입니다. 학습 해상도와 다르면
+        #   에러 없이 작은 객체만 조용히 안 잡힙니다. 명시적으로 넘깁니다.
+        self.imgsz = int(rospy.get_param("~imgsz", 640))
         topic = rospy.get_param("~image_topic", "/cam_front/color/image_raw/compressed")
 
         # ROI: [x1, y1, x2, y2] 원본 이미지 기준. 빈 리스트면 전체.
@@ -100,7 +120,8 @@ class TrafficLightDetector(object):
 
         rospy.Timer(rospy.Duration(1.0 / self.infer_hz), self.step)
         rospy.Timer(rospy.Duration(5.0), self.watchdog)
-        rospy.loginfo("traffic_light_detector 준비 완료 (%.0f Hz)", self.infer_hz)
+        rospy.loginfo("traffic_light_detector 준비 완료 (%.0f Hz, imgsz=%d)",
+                      self.infer_hz, self.imgsz)
 
     # ── ROI ──────────────────────────────────────────────────────────
     def crop(self, img):
@@ -123,6 +144,7 @@ class TrafficLightDetector(object):
 
         roi_img, (ox, oy) = self.crop(img)
         res = self.model.predict(roi_img, conf=self.conf_th,
+                                 imgsz=self.imgsz,
                                  device=self.device, verbose=False)[0]
 
         label, conf, box = None, 0.0, None

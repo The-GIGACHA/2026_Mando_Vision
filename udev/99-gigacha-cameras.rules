@@ -1,0 +1,48 @@
+# ═══ GIGACHA 2026 카메라 고정 — 2대 구성 (cam_front / cam_stopline) ═══
+#
+# 이 파일이 원본이다. /etc 로 복사해서 쓴다:
+#     sudo install -m 644 ~/2026_HL_FMA_15/src/mando_vision_2026/udev/99-gigacha-cameras.rules \
+#                         /etc/udev/rules.d/99-gigacha-cameras.rules
+#     sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=video4linux
+#     ls -l /dev/cam_*
+#
+# ── 왜 KERNELS(포트경로) 를 버리고 serial 로 바꿨나 ─────────────────
+#   예전 규칙은 물리 포트 경로로 잡았다:
+#       KERNELS=="1-7.3"    → cam_stopline
+#       KERNELS=="2-2.4.1"  → cam_left
+#       KERNELS=="2-2.2"    → cam_right
+#   카메라를 4대 → 2대로 줄이면서 허브에서 뽑고 다시 꽂으면 포트 번호가
+#   달라진다. 그러면 심볼릭 링크가 조용히 안 생기고, usb_cam 노드는
+#   respawn 으로 무한 재시작만 한다 (에러가 아니라 로그 도배로 나타난다).
+#   serial 은 어느 허브 어느 포트에 꽂아도 안 변한다. 케이블을 옮겨도 된다.
+#
+# ── 새 카메라로 교체했을 때 serial 알아내는 법 ──────────────────────
+#     udevadm info -a -n /dev/videoN | grep -m1 'ATTRS{serial}'
+#   또는  ls /dev/v4l/by-id/     (파일명 끝의 8자리)
+#
+# ── ATTR{index}=="0" 이 왜 필요한가 ─────────────────────────────────
+#   UVC 카메라 1대가 video 노드를 2개 이상 만든다 (C920 = video8 영상 /
+#   video9 메타데이터). index 0 만 실제 영상이다. 이걸 빼면 메타데이터
+#   노드에도 링크가 걸려 usb_cam 이 "cannot open" 으로 죽는다.
+
+# ── C920 하향 : 정지선 ──────────────────────────────────────────────
+ACTION=="add|change", SUBSYSTEM=="video4linux", \
+  ATTRS{idVendor}=="046d", ATTRS{serial}=="FBA4B41F", ATTR{index}=="0", \
+  SYMLINK+="cam_stopline"
+
+# ── D455 전방 (cam_front) ───────────────────────────────────────────
+#   realsense2_camera 가 USB 를 직접 열고 시리얼로 장치를 고른다.
+#   /dev/video* 를 안 쓰므로 udev 규칙이 필요 없다. 여기에 뭘 추가하지 말 것.
+#   현재 장착분 serial = 238623060437
+#     확인:  rs-enumerate-devices -s
+#     한 대만 꽂혀 있으면 launch 에 serial_no 를 안 줘도 알아서 잡는다.
+
+# ── 뺀 것 ───────────────────────────────────────────────────────────
+#   cam_left  / cam_right (BRIO 2대) — 2026-09-06 제거.
+#   허브에 4대를 물리면 USB 대역폭이 모자라 전송이 밀린다.
+#   다시 달 때는 위와 같은 형식으로 serial 을 넣을 것. 참고로 예전 BRIO:
+#     cam_left  ATTRS{serial}=="BF5AC6D2"
+#     cam_right ATTRS{serial}=="EBA07419"
+#   ★ 되살리기 전에 /etc/udev/rules.d/99-logitech.rules 를 먼저 확인할 것.
+#     그 파일도 같은 serial 로 cam_left/cam_right 를 만든다 — 두 파일이
+#     같은 SYMLINK 를 놓고 경쟁하면 어느 쪽이 이겼는지 알 수 없게 된다.

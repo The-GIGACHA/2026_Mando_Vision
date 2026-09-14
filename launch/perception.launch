@@ -1,22 +1,63 @@
 <launch>
-  <!-- ═══ 인지 전체 기동 ═══
+  <!-- ═══ 인지 전체 기동 ═══════════════════════════════════════════════
        roslaunch mando_vision_2026 perception.launch
-       roslaunch mando_vision_2026 perception.launch monitor:=false           -->
+       roslaunch mando_vision_2026 perception.launch monitor:=false
+
+       ★ 첫 실행이나 문제 추적 시에는 하나씩 켜세요.
+         roslaunch mando_vision_2026 perception.launch \
+             lane:=false stopline:=false traffic_light:=false
+       ───────────────────────────────────────────────────────────────── -->
 
   <arg name="tf"            default="true"/>
   <arg name="lane"          default="true"/>
   <arg name="traffic_light" default="true"/>
-  <arg name="cone"          default="true"/>
+  <arg name="obstacle"      default="true"/>
   <arg name="stopline"      default="true"/>
-  <arg name="delivery_sign" default="false"/>   <!-- 2026 규정에 없음 -->
+
+  <!-- ★ cone 은 BRIO 좌·우(/cam_left, /cam_right) 를 먹는다. 2026-09-06 에
+       카메라를 2대로 줄이면서 그 두 대를 뺐으므로 입력이 없다.
+       true 로 두면 object_detector 2개가 영영 안 오는 이미지를 기다리며
+       GPU 메모리만 잡는다. BRIO 를 다시 달면 그때 true 로 되돌릴 것. -->
+  <arg name="cone"          default="false"/>
+
+  <!-- 2026 규정에 없음. 배달표지판 모델은 다른 대회용이었다. -->
+  <arg name="delivery_sign" default="false"/>
+
   <arg name="monitor"       default="true"/>
 
-  <include if="$(arg tf)"            file="$(find mando_vision_2026)/launch/tf.launch"/>
-  <include if="$(arg lane)"          file="$(find mando_vision_2026)/launch/lane.launch"/>
-  <include if="$(arg traffic_light)" file="$(find mando_vision_2026)/launch/traffic_light.launch"/>
-  <include if="$(arg cone)"          file="$(find mando_vision_2026)/launch/cone.launch"/>
-  <include if="$(arg stopline)"      file="$(find mando_vision_2026)/launch/stopline.launch"/>
-  <include if="$(arg delivery_sign)" file="$(find mando_vision_2026)/launch/delivery_sign.launch"/>
+  <!-- ── 모델 해상도 ──────────────────────────────────────────────────
+       ★ 학습 imgsz = export imgsz = 런타임 imgsz 세 군데가 같아야 한다.
+         obstacle 을 960 으로 올린 이유: 신호제어차량 LED 패널이
+         640 기준 17 px 밖에 안 돼서 640 으로는 학습도 검출도 안 된다.
+         960 이면 같은 패널이 25.7 px 이 된다.
+       ──────────────────────────────────────────────────────────────── -->
+  <arg name="obstacle_imgsz"      default="960"/>
+  <arg name="traffic_light_imgsz" default="640"/>
+
+  <include if="$(arg tf)"
+           file="$(find mando_vision_2026)/launch/tf.launch"/>
+
+  <include if="$(arg lane)"
+           file="$(find mando_vision_2026)/launch/lane.launch"/>
+
+  <include if="$(arg traffic_light)"
+           file="$(find mando_vision_2026)/launch/traffic_light.launch">
+    <arg name="imgsz" value="$(arg traffic_light_imgsz)"/>
+  </include>
+
+  <include if="$(arg obstacle)"
+           file="$(find mando_vision_2026)/launch/obstacle.launch">
+    <arg name="imgsz" value="$(arg obstacle_imgsz)"/>
+  </include>
+
+  <include if="$(arg stopline)"
+           file="$(find mando_vision_2026)/launch/stopline.launch"/>
+
+  <include if="$(arg cone)"
+           file="$(find mando_vision_2026)/launch/cone.launch"/>
+
+  <include if="$(arg delivery_sign)"
+           file="$(find mando_vision_2026)/launch/delivery_sign.launch"/>
 
   <node if="$(arg monitor)" pkg="mando_vision_2026" type="detection_monitor.py"
         name="detection_monitor" output="screen"/>
