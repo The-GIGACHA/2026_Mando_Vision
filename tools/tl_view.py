@@ -6,7 +6,8 @@ tl_view.py — 신호등 판정을 눈으로 확인합니다. 여러 모델을 �
   배치 위치:  mando_vision_2026/tools/tl_view.py
 
   bag(또는 영상)을 직접 읽어 traffic_light_detector.py 와 같은 규칙으로 돌립니다.
-      10 Hz · conf 0.5 · 프레임당 가장 신뢰도 높은 박스 1개 · 5프레임 중 3표로 확정
+      15 Hz · conf 0.5 · 프레임당 가장 신뢰도 높은 박스 1개 · 5프레임 중 3표로 확정
+      imgsz 와 ROI 기본값은 config/classes.yaml · launch/traffic_light.launch 와 같다
 
 화면
   위 띠      모델마다 한 줄:  확정 라벨(표수)  |  이번 프레임의 raw 검출
@@ -57,21 +58,30 @@ def main():
     ap.add_argument("--topic", default=TOPIC)
     ap.add_argument("--start", type=float, default=0.0)
     ap.add_argument("--end", type=float, default=0.0)
-    ap.add_argument("--hz", type=float, default=10.0, help="판정 주기 (차량 노드 = 10)")
-    ap.add_argument("--imgsz", type=int, default=640)
+    ap.add_argument("--hz", type=float, default=15.0, help="판정 주기 (차량 노드 = 15)")
+    # ★ 기본 None. 아래에서 classes.yaml 의 traffic_light.imgsz 를 읽는다.
+    #   여기 숫자를 박아두면 차량이 바뀌었는데 도구만 옛 해상도로 도는 일이 생긴다.
+    ap.add_argument("--imgsz", type=int, default=None)
     ap.add_argument("--conf", type=float, default=0.5, help="노드의 ~confidence")
     ap.add_argument("--vote-window", dest="vote_n", type=int, default=5)
     ap.add_argument("--vote-min", dest="vote_k", type=int, default=3)
-    ap.add_argument("--roi", nargs=4, type=int, default=None, metavar=("X1", "Y1", "X2", "Y2"))
+    # ★ 기본이 노드와 같은 상단 절반이다 (launch/traffic_light.launch 의 ~roi).
+    #   ROI 없이 보려면 --roi 0 0 1280 720.
+    ap.add_argument("--roi", nargs=4, type=int, default=[0, 0, 1280, 480],
+                    metavar=("X1", "Y1", "X2", "Y2"))
     ap.add_argument("--speed", type=float, default=1.0, help="재생 배속 (0 = 최대한 빨리)")
     ap.add_argument("--save", default=None, help="mp4 로 저장")
     ap.add_argument("--no-show", dest="show", action="store_false")
     a = ap.parse_args()
 
+    import yaml
+    with open(os.path.join(ROOT, "config", "classes.yaml"), encoding="utf-8") as f:
+        _sec = yaml.safe_load(f)["traffic_light"]
     if not a.models:
-        import yaml
-        with open(os.path.join(ROOT, "config", "classes.yaml"), encoding="utf-8") as f:
-            a.models = [os.path.join(ROOT, yaml.safe_load(f)["traffic_light"]["file"])]
+        a.models = [os.path.join(ROOT, _sec["file"])]
+    if a.imgsz is None:
+        a.imgsz = int(_sec["imgsz"])
+    print("[tl_view] imgsz=%d  hz=%.0f  conf=%.2f  roi=%s" % (a.imgsz, a.hz, a.conf, a.roi))
     nets = []
     for k, p in enumerate(a.models):
         if not os.path.isfile(p):

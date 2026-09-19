@@ -6,7 +6,8 @@ sign_car_view.py — 신호제어차량 판정을 눈으로 확인합니다 (cat
   배치 위치:  mando_vision_2026/tools/sign_car_view.py
 
   bag(또는 영상)을 직접 읽어 obstacle.pt + utils/sign_car.py 를
-  차량 노드와 같은 조건(15 Hz, imgsz 960, conf 0.20)으로 돌리고 화면에 그립니다.
+  차량 노드와 같은 조건(15 Hz, conf 0.20)으로 돌리고 화면에 그립니다.
+  imgsz 는 config/classes.yaml 의 obstacle.imgsz 를 따릅니다 (2026-09-20 기준 1280).
 
 화면
   위 띠     NEW = 현재 sign_car.py 판정 (HELD 면 점멸 유지 중, 뒤 숫자는 경과 초)
@@ -92,12 +93,21 @@ def main():
     ap.add_argument("--start", type=float, default=0.0)
     ap.add_argument("--end", type=float, default=0.0)
     ap.add_argument("--hz", type=float, default=15.0, help="판정 주기 (차량 노드 = 15)")
-    ap.add_argument("--imgsz", type=int, default=960)
+    # ★ 기본 None. 아래에서 classes.yaml 의 obstacle.imgsz 를 읽는다.
+    ap.add_argument("--imgsz", type=int, default=None)
     ap.add_argument("--conf", type=float, default=0.20)
     ap.add_argument("--speed", type=float, default=1.0, help="재생 배속 (0 = 최대한 빨리)")
     ap.add_argument("--save", default=None, help="mp4 로 저장")
     ap.add_argument("--no-show", dest="show", action="store_false")
     a = ap.parse_args()
+
+    if a.imgsz is None:
+        import yaml
+        with open(os.path.join(here, "..", "config", "classes.yaml"),
+                  encoding="utf-8") as f:
+            a.imgsz = int(yaml.safe_load(f)["obstacle"]["imgsz"])
+    print("[sign_car_view] %s  imgsz=%d  hz=%.0f  conf=%.2f"
+          % (os.path.basename(a.model), a.imgsz, a.hz, a.conf))
 
     sys.path.insert(0, a.utils)
     from sign_car import SignCarParams, SignCarVoter, decide, PANELS, HOST, _in_zone
