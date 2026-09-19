@@ -15,7 +15,7 @@ obstacle_detector.py — 장애물 + 신호제어차량 지시 (obstacle.pt)
 
   {"detected": true, "command": "LEFT", "basis": "go",
    "confidence": "high", "both_seen": true, "conflict": false,
-   "votes": 5, "window": 7,
+   "votes": 5, "window": 7, "held": false, "held_s": 0.0,
    "panels": {"left_go": 0.71, "left_X": null,
               "right_go": null, "right_X": 0.66},
    "image_stamp": 1234567.89, "age_ms": 78.3, "stamp": 1234567.97}
@@ -24,6 +24,11 @@ obstacle_detector.py — 장애물 + 신호제어차량 지시 (obstacle.pt)
     basis 가 "x" 면 ↓ 를 직접 못 보고 X 만 보고 상보 추론한 것이라
     판단팀이 더 보수적으로 처리해야 합니다.
     confidence 와 conflict 를 반드시 같이 보세요.
+
+  ★ 패널은 점멸합니다 (약 0.67초 켜짐 / 0.67초 꺼짐).
+    held=true 면 이번 프레임에 본 것이 아니라 held_s 초 전에 확정한 지시를
+    유지 중이라는 뜻입니다 (sign/hold_s 까지, 차체가 사라지면 즉시 해제).
+    이때 basis·confidence 는 확정 당시의 근거입니다.
 
 ★ 이 노드는 단방향입니다. 구독은 이미지뿐이고, 제어에 관여하지 않습니다.
 """
@@ -87,6 +92,13 @@ class ObstacleDetector(object):
                                                    self.p.host_margin))
         self.p.min_inside = float(rospy.get_param("~sign/min_inside",
                                                   self.p.min_inside))
+        self.p.gate_mode = str(rospy.get_param("~sign/gate_mode", self.p.gate_mode))
+        self.p.zone_left = tuple(rospy.get_param("~sign/zone_left", self.p.zone_left))
+        self.p.zone_right = tuple(rospy.get_param("~sign/zone_right", self.p.zone_right))
+        self.p.zone_up = tuple(rospy.get_param("~sign/zone_up", self.p.zone_up))
+        self.p.hold_s = float(rospy.get_param("~sign/hold_s", self.p.hold_s))
+        self.p.host_lost_s = float(rospy.get_param("~sign/host_lost_s",
+                                                   self.p.host_lost_s))
         self.p.vote_n = int(rospy.get_param("~sign/vote_window", self.p.vote_n))
         self.p.vote_k = int(rospy.get_param("~sign/vote_min", self.p.vote_k))
 
@@ -191,6 +203,7 @@ class ObstacleDetector(object):
                                    "basis": None, "confidence": None,
                                    "both_seen": False, "conflict": False,
                                    "votes": 0, "window": self.p.vote_n,
+                                   "held": False, "held_s": None,
                                    "panels": {k: None for k in PANELS},
                                    "image_stamp": None, "age_ms": None})
             return
@@ -206,6 +219,7 @@ class ObstacleDetector(object):
             "both_seen": src["both_seen"],
             "conflict": src["conflict"] or obs["conflict"],
             "votes": votes, "window": self.p.vote_n,
+            "held": self.voter.held, "held_s": self.voter.held_s,
             "host": obs["host"],
             "panels": obs["panels"],
             "dropped": obs["dropped"],

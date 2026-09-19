@@ -37,16 +37,33 @@
     <param name="sign/conf_x"  value="0.45"/>
 
     <!-- 차체 게이트 — '화면 끝에서 뜨는' 오검출을 잡는 핵심 장치.
-         패널은 차 몸통에 붙어 있으므로 traffic_car 박스 밖의
-         패널 검출은 버립니다.
+         패널은 차체에 붙어 있지 않고, 옆으로 뻗은 암에 3개가 달려 있습니다.
+         2차로라 좌 패널(left_*)과 차체 위 중앙 패널(right_*)만 씁니다.
+         gate_mode=zone : 패널 중심이 차체 기준 제자리에 있을 때만 인정.
+             가로 = (패널cx - 차체cx) / 차체폭
+             세로 = (차체상단 - 패널cy) / 차체높이   (위가 +)
+             0919 실측: 좌 -1.66, 중앙 0.00, 세로 0.37. 우 패널(+1.7)은 버립니다.
+         gate_mode=inside : 예전 방식(패널이 차체 박스 안). 실제 구조와 안 맞아
+             진짜 패널을 전부 버립니다. 비교용으로만 남겨둡니다.
          차체를 자주 놓쳐서 지시가 안 나오면 require_host 를 false 로
          내리되, 그만큼 오검출이 늘어납니다.                        -->
     <param name="sign/require_host" value="true"/>
+    <param name="sign/gate_mode"    value="zone"/>
+    <rosparam param="sign/zone_left">[-2.8, -0.9]</rosparam>
+    <rosparam param="sign/zone_right">[-0.7, 0.7]</rosparam>
+    <rosparam param="sign/zone_up">[-0.5, 1.2]</rosparam>
+    <!-- 아래 둘은 gate_mode=inside 일 때만 -->
     <param name="sign/host_margin"  value="0.12"/>
     <param name="sign/min_inside"   value="0.60"/>
 
     <!-- 시간 다수결 -->
     <param name="sign/vote_window" value="7"/>
     <param name="sign/vote_min"    value="4"/>
+
+    <!-- 점멸 유지 — 패널은 약 0.67초 켜짐 / 0.67초 꺼짐으로 깜빡입니다.
+         꺼진 동안 지시가 끊기지 않도록 확정 지시를 hold_s 초 유지합니다
+         (출력에 held=true, held_s). 차체가 host_lost_s 넘게 안 보이면 해제. -->
+    <param name="sign/hold_s"      value="3.0"/>
+    <param name="sign/host_lost_s" value="1.0"/>
   </node>
 </launch>
