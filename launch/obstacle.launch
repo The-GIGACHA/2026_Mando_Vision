@@ -86,7 +86,7 @@
          X 는 붉은 사선이라 배경의 붉은 구조물과 섞입니다.
          그래서 임계를 비대칭으로 주고, ↓ 가 하나라도 있으면
          X 는 아예 보지 않습니다.                                  -->
-    <param name="sign/conf_go" value="0.25"/>
+    <param name="sign/conf_go" value="0.3"/>
     <param name="sign/conf_x"  value="0.45"/>
 
     <!-- 차체 게이트 — '화면 끝에서 뜨는' 오검출을 잡는 핵심 장치.
