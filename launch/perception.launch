@@ -9,7 +9,10 @@
        ───────────────────────────────────────────────────────────────── -->
 
   <arg name="tf"            default="true"/>
-  <arg name="lane"          default="true"/>
+  <!-- lane 은 기본 off. 전역경로를 GPS 로 따라가므로 차선 결과를 쓰는 곳이 없고,
+       실차 도로로 학습된 YOLOPv2 가 GPU 만 차지한다. 노드·가중치는 남겨 두어
+       필요하면 lane:=true 로 켤 수 있다. -->
+  <arg name="lane"          default="false"/>
   <arg name="traffic_light" default="true"/>
   <arg name="obstacle"      default="true"/>
   <arg name="stopline"      default="true"/>
@@ -17,8 +20,14 @@
   <!-- ★ cone 은 BRIO 좌·우(/cam_left, /cam_right) 를 먹는다. 2026-09-06 에
        카메라를 2대로 줄이면서 그 두 대를 뺐으므로 입력이 없다.
        true 로 두면 object_detector 2개가 영영 안 오는 이미지를 기다리며
-       GPU 메모리만 잡는다. BRIO 를 다시 달면 그때 true 로 되돌릴 것. -->
+       GPU 메모리만 잡는다. BRIO 를 다시 달면 그때 true 로 되돌릴 것.
+       ★★ 이 cone 은 cone.launch(BRIO) 전용이다. obstacle.launch 안의
+          전방 콘 대역(代役)과는 다른 인자다. 그쪽은 obstacle_cone 으로 넘긴다. -->
   <arg name="cone"          default="false"/>
+
+  <!-- obstacle.launch 의 전방 콘 대역. 실물 T870 을 쓰므로 기본 꺼짐.
+       T870 없이 콘을 세워 연습할 때만 obstacle_cone:=true. -->
+  <arg name="obstacle_cone" default="false"/>
 
   <!-- 2026 규정에 없음. 배달표지판 모델은 다른 대회용이었다. -->
   <arg name="delivery_sign" default="false"/>
@@ -37,9 +46,6 @@
   <include if="$(arg tf)"
            file="$(find mando_vision_2026)/launch/tf.launch"/>
 
-  <include if="$(arg lane)"
-           file="$(find mando_vision_2026)/launch/lane.launch"/>
-
   <include if="$(arg traffic_light)"
            file="$(find mando_vision_2026)/launch/traffic_light.launch">
     <arg name="imgsz" value="$(arg traffic_light_imgsz)"/>
@@ -48,6 +54,7 @@
   <include if="$(arg obstacle)"
            file="$(find mando_vision_2026)/launch/obstacle.launch">
     <arg name="imgsz" value="$(arg obstacle_imgsz)"/>
+    <arg name="cone"  value="$(arg obstacle_cone)"/>
   </include>
 
   <include if="$(arg stopline)"
@@ -55,9 +62,6 @@
 
   <include if="$(arg cone)"
            file="$(find mando_vision_2026)/launch/cone.launch"/>
-
-  <include if="$(arg delivery_sign)"
-           file="$(find mando_vision_2026)/launch/delivery_sign.launch"/>
 
   <node if="$(arg monitor)" pkg="mando_vision_2026" type="detection_monitor.py"
         name="detection_monitor" output="screen"/>

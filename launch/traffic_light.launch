@@ -1,27 +1,54 @@
 <launch>
   <!-- 신호등 — 전방 상향 D455 -->
   <arg name="image" default="/cam_front/color/image_raw/compressed"/>
-  <arg name="hz"    default="10"/>
+  <arg name="hz"    default="15"/>
 
   <!-- ★ 학습 imgsz = TensorRT export imgsz = 런타임 imgsz 세 군데가
        같아야 합니다. 어긋나도 에러가 안 나고 작은 객체만 조용히
        안 잡힙니다. 신호등 모델은 640 으로 학습됐습니다. -->
   <arg name="imgsz" default="640"/>
 
+  <!-- 가중치. 기본은 차량 노트북에서 export 한 TensorRT 엔진입니다
+       (tools/export_trt.py 의 traffic_light 섹션).
+       ★ 엔진 로드가 실패하면 (파일 없음 / TensorRT·드라이버 불일치로 역직렬화 실패)
+         파일을 고치지 말고 .pt 로 되돌리세요:
+           roslaunch mando_vision_2026 traffic_light.launch \
+             weights:=$(rospack find mando_vision_2026)/weights/traffic_light_20250918.pt
+       ★ 엔진은 export 때 imgsz 로 고정됩니다. 위 imgsz 와 반드시 같아야 합니다. -->
+  <arg name="weights"
+       default="$(find mando_vision_2026)/weights/traffic_light_20250918.pt"/>
+
   <node pkg="mando_vision_2026" type="traffic_light_detector.py"
         name="traffic_light_detector" output="screen" respawn="true">
-    <param name="weights"
-           value="$(find mando_vision_2026)/weights/traffic_light_20250918.pt"/>
+    <param name="weights"     value="$(arg weights)"/>
     <param name="image_topic" value="$(arg image)"/>
     <param name="confidence"  value="0.5"/>
     <param name="infer_hz"    value="$(arg hz)"/>
+    <!-- 09-19 까지 이 줄이 없어 코드 기본값 5 로 돌았다 (실측 4.2 Hz) -->
+    <param name="viz_hz"      value="$(arg hz)"/>
     <param name="imgsz"       value="$(arg imgsz)"/>
     <param name="vote_window" value="5"/>
     <param name="vote_min"    value="3"/>
 
-    <!-- ROI [x1,y1,x2,y2] 원본 이미지 기준. 소실점 주변을 원본 해상도 그대로
-         크롭해 넣으면 원거리 신호등의 픽셀이 살아납니다.
-         비워두면 전체 이미지. 차량에 장착 후 실제 영상 보고 채우세요. -->
-    <rosparam param="roi">[]</rosparam>
+    <!-- ROI [x1,y1,x2,y2] 원본 이미지 기준. 비워두면 전체 이미지.
+         D455 위쪽 절반만 본다 (2026-09-17). 카메라가 지면 1.0 m·위로 2.75도라 지평선이 v≈323 이고,
+         1.0 m 보다 높이 달린 신호등 하우징은 거리와 상관없이 지평선 위에 찍힌다.
+         아래 절반의 차량 브레이크등·콘 반사 같은 오검출을 추론 전에 없애려는 것이다.
+         ★ 원거리 신호등은 v≈323 근처라 경계(360)까지 여유가 37 px 이다. 차체가 뒤로 기울면
+           (가속·오르막) 지평선이 내려가 잘릴 수 있다. 실차 영상에서 박스 아래끝을 보고 조정할 것.
+         ★ 크롭은 해상도를 올리지 않는다. 1280x360 을 640 으로 줄이므로 전체 프레임과 배율이 같다.
+           엔진 입력이 640x640 고정이라 연산량도 그대로다. -->
+    <rosparam param="roi">[0, 0, 1280, 480]</rosparam>
+
+    <!-- 미션 게이트: 제어 GRM 의 /global_active_map + /global_nearest_idx 로 신호 구간 15 m 앞부터 켠다.
+         제어는 구간에 들어서는 순간 True 가 이미 와 있어야 서지 않고 지나간다.
+         GRM 토픽이 2초 넘게 없으면 항상 켜진다 (단독 시험). 끄려면 gate/enable false -->
+    <param name="gate/enable"    value="true"/>
+    <param name="gate/stale_sec" value="2.0"/>
+    <rosparam param="gate/missions">{TRAFFIC_LIGHT: 15.0}</rosparam>
+
+    <!-- /perception/traffic_light/go: 이 픽셀보다 작은 좌회전 화살표는 red 와 구분이 안 돼 False -->
+    <param name="arrow_ratio"  value="0.2333"/>
+    <param name="arrow_min_px" value="12.0"/>
   </node>
 </launch>

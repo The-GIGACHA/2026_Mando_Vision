@@ -96,7 +96,16 @@ class HeartbeatPublisher(object):
 
 
 class Throttle(object):
-    """시각화처럼 비싼 작업의 발행 빈도를 제한합니다."""
+    """시각화처럼 비싼 작업의 발행 빈도를 제한합니다.
+
+    ★ _last 를 '실제로 발행한 시각' 으로 두면 요청한 hz 가 안 나옵니다.
+      주기 루프는 이산적이라 항상 기준선을 조금 넘겨서 ready() 를 부르고,
+      그 초과분이 매번 다음 기준선에 누적됩니다.
+          15 Hz 루프(66.7 ms) + viz_hz 5 (200 ms)
+            -> 200 ms 기준선을 206.7 ms 에 넘김 -> 다음 기준선 406.7 ms
+            -> 400 ms 주기는 못 쓰고 466.7 ms 에 발행 -> 실측 4.3 Hz
+      기준선을 period 씩만 밀어 격자에 붙여 둡니다 (2026-09-19 실측 후).
+      많이 밀렸을 때는 따라잡기를 포기하고 now 로 다시 맞춥니다."""
 
     def __init__(self, hz):
         self._period = 1.0 / float(hz) if hz > 0 else 0.0
@@ -106,7 +115,13 @@ class Throttle(object):
         if self._period <= 0.0:
             return False
         now = rospy.Time.now().to_sec()
-        if now - self._last >= self._period:
+        if self._last == 0.0:
             self._last = now
             return True
-        return False
+        if now - self._last < self._period:
+            return False
+        self._last += self._period
+        if now - self._last >= self._period:
+            # 한 주기 이상 밀렸다 (루프가 느렸거나 처음). 몰아서 내지 않습니다.
+            self._last = now
+        return True

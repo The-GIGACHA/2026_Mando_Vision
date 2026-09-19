@@ -53,14 +53,19 @@ traffic_light:
 obstacle:
   file: "weights/obstacle.pt"
   imgsz: 960          # ★ 640 이면 LED 패널이 17 px 이라 못 잡습니다
+  # ★ 이 순서는 학습에 쓴 data.yaml 의 순서(= Roboflow 의 ASCII 정렬)입니다.
+  #   읽기 좋은 순서로 바꾸지 마십시오. obstacle_detector 는 모델이 뱉은
+  #   인덱스를 여기 이름으로 변환하므로(self.names = sec["names"]),
+  #   순서를 건드리면 좌우 지시가 정반대로 나갑니다.
+  #   2026-09-12 에 실제로 어긋나 있었고 class_map 대조가 잡았습니다.
   names:
-    0: T870           # S자 코스 장애물
-    1: kid            # 돌발 장애물 (유아 인형)
-    2: traffic_car    # 신호제어차량 차체
-    3: left_go        # 좌측 차로 개방 (↓)
-    4: left_X         # 좌측 차로 폐쇄 (X)
-    5: right_go       # 우측 차로 개방 (↓)
-    6: right_X        # 우측 차로 폐쇄 (X)
+    0: T870          # S자 코스 장애물
+    1: kid           # 돌발 장애물 (유아 인형)
+    2: left_X        # 좌측 차로 폐쇄 (X)
+    3: left_go       # 좌측 차로 개방 (↓)
+    4: right_X       # 우측 차로 폐쇄 (X)
+    5: right_go      # 우측 차로 개방 (↓)
+    6: traffic_car   # 신호제어차량 차체
 
   # 두 패널은 상보적이라 실제 상태는 둘뿐입니다.
   #   left_go  + right_X  ->  좌측 차로로

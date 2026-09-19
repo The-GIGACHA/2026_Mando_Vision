@@ -34,12 +34,37 @@ ROS 패키지명: **`mando_vision_2026`**
 
 | 토픽 | 타입 | 주기 |
 |---|---|---|
+★ 제어팀에 나가는 `/perception/*` 데이터 토픽은 아래 5개가 전부입니다. 더하지 마세요.
+
+| 토픽 | 타입 | 주기 |
+|---|---|---|
 | `/perception/lane` | `std_msgs/String` (JSON) | 15 Hz, 항상 |
 | `/perception/traffic_light` | `std_msgs/String` (JSON) | 10 Hz, 항상 |
-| `/perception/cone/{left,right}/detections` | `vision_msgs/Detection2DArray` | 10 Hz, 항상 |
+| `/perception/obstacle` | `std_msgs/String` (JSON) — base_link x, y (`ground_markers`) | 15 Hz, 항상 |
+| `/perception/sign_car` | `std_msgs/String` (JSON) | 15 Hz, 항상 |
 | `/perception/stopline` | `std_msgs/String` (JSON) | 15 Hz, 항상 |
-| `/perception/delivery_sign/detections` | `vision_msgs/Detection2DArray` | 5 Hz (기본 비활성) |
 | `/perception/*/viz/compressed` | `sensor_msgs/CompressedImage` | 5 Hz, **구독자 있을 때만** |
+| `/perception/obstacle/viz/markers` | `visualization_msgs/MarkerArray` | 5 Hz, **구독자 있을 때만** |
+
+노드 사이 내부 배선은 `/perception` 밖에 둡니다.
+
+| 토픽 | 타입 | 발행 |
+|---|---|---|
+| `/detect/obstacle` | `vision_msgs/Detection2DArray` | obstacle_detector (전체 클래스) |
+| `/detect/cone` | `vision_msgs/Detection2DArray` | obstacle.launch 의 cone_detector (전방) |
+| `/detect/cone/{left,right}` | `vision_msgs/Detection2DArray` | cone.launch (BRIO, 기본 비활성) |
+| `/detect/delivery_sign` | `vision_msgs/Detection2DArray` | 기본 비활성 |
+
+`/perception/obstacle` 페이로드 (키 집합은 검출이 없어도 같음, 규칙은 `src/ground_markers.py`):
+
+```json
+{"detected": true, "n": 1, "frame_id": "base_link",
+ "items": [{"id": 3, "label": "cone_blue", "source": "cone", "conf": 0.87,
+            "x": 4.21, "y": 0.35, "z": 0.45, "width": 0.20,
+            "x_err": 0.22, "votes": 5, "stable": true,
+            "box": [610, 402, 690, 520]}],
+ "image_stamp": 1726400000.045, "age_ms": 78.3, "stamp": 1726400000.123}
+```
 
 `/perception/traffic_light` 페이로드:
 
@@ -81,7 +106,7 @@ BRIO 좌·우를 빼고 2대로 줄였다. 그래서 `cone.launch` 는 지금 �
 
 | 이름 | 장치 | serial | 토픽 접두어 | 쓰는 곳 |
 |---|---|---|---|---|
-| `cam_front` | Intel D455 | 238623060437 | `/cam_front` | 차선·신호등·통행가능 |
+| `cam_front` | Intel D455 | 238623060437 | `/cam_front` | 차선·신호등·장애물·신호제어차량 |
 | `cam_stopline` | Logitech C920 | FBA4B41F | `/cam_stopline` | 정지선 |
 
 ### `/dev` 이름은 serial 로 고정한다
@@ -106,11 +131,8 @@ ls -l /dev/cam_*
 
 ### D455 는 한 프로세스만 연다
 
-`cameras.launch d455:=true` 와 `camera_passability/traversability_live.launch`
-를 같이 띄우면 나중 것이 `Device or resource busy` 로 죽는다. 주행 스택에서는
-`traversability_live.launch` 쪽 하나만 쓴다 — 그쪽도 2026-09-06 부터
-`cam_front` 이름으로 띄우므로 토픽 접두어가 이 표와 같다.
-(예전 배그는 `/camera/...` 라서 재생할 때만 `cam_ns:=camera`)
+`cameras.launch d455:=true` 로 연다. 다른 프로세스(`rs_camera.launch` 등)에서
+같이 열면 나중 것이 `Device or resource busy` 로 죽는다.
 
 ## 실행
 

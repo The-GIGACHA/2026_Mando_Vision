@@ -11,6 +11,8 @@
         3. min/max_thickness : viz 의 t=NNpx 값을 보고 그 주변으로
         4. min_fill : 정지선이 ROI 가로를 얼마나 채우는지 보고
         5. min_response : 오검출이 남으면 올리고, 미검출이면 내리고
+        6. white_gate   : 모래·자갈이 남으면 white_max_sat 을 낮추거나
+                          white_val_margin 을 올린다 (아래 ⑤ 참고)
   -->
   <arg name="image" default="/cam_stopline/image_raw/compressed"/>
   <arg name="hz"    default="15"/>
@@ -20,7 +22,7 @@
 
     <param name="image_topic" value="$(arg image)"/>
     <param name="rate_hz"     value="$(arg hz)"/>
-    <param name="viz_hz"      value="5"/>
+    <param name="viz_hz"      value="$(arg hz)"/>
 
     <!-- ① ROI [x1,y1,x2,y2] 원본 픽셀. 비우면 전체
          ★ 640x480 기준입니다 (cameras.launch 의 stopline_height=480) -->
@@ -32,21 +34,43 @@
          정지선이 2*tau 보다 두꺼우면 내부 픽셀은 위아래가 전부 밝아
          응답이 0 이 되어 아무것도 안 잡힙니다.
 
-         C920(지면 0.485 m, pitch 27도, 640x480) 기준 30cm 정지선 두께:
-             2.0 m 앞  20 px        1.0 m 앞  58 px
-             1.5 m 앞  31 px        0.8 m 앞  79 px
-                                    0.6 m 앞 115 px
+         ★ 09-18 정정 — URDF 실측(지면 0.830 m, pitch 28도) 기준으로 다시 계산.
+           그 전에는 0.485 m / 27도로 적혀 있어 두께가 20~40% 얇게 잡혀 있었습니다.
 
-         즉 접근하면서 두께가 20 -> 115 px 로 변합니다.
-         단일 tau 로는 절대 못 덮습니다. tau=30 하나만 쓰면
-         1.5 m 밖에서만 잡히고 정작 정밀 정지 구간에서 눈이 멉니다.
+         C920(지면 0.830 m, pitch 28도, 640x480, fx≈454) 기준 30cm 정지선 두께:
+             3.0 m 앞  11 px        1.2 m 앞  46 px
+             2.0 m 앞  22 px        1.0 m 앞  58 px
+             1.5 m 앞  33 px        0.8 m 앞  76 px
+                                    0.6 m 앞 104 px
 
-         ★ 실제 영상에서 두께를 먼저 재고 이 목록을 조정하세요.       -->
-    <rosparam param="taus">[20, 45, 80]</rosparam>
+         즉 접근하면서 두께가 11 -> 104 px 로 변합니다.
+         tau 는 선 두께의 절반보다 커야 y±tau 가 노면에 닿습니다
+         (0.6 m 에서 tau ≥ 52). 단일 tau 로는 절대 못 덮습니다.
+
+         ★ 실제 영상에서 두께를 먼저 재고 이 목록을 조정하세요.
+         ★ fx 는 스펙 화각에서 유도한 값입니다 — /cam_stopline/camera_info 가
+           전부 0 이라(캘리브레이션 yaml 없음) 실측 K 로 확인하지 못했습니다. -->
+    <rosparam param="taus">[15, 30, 55]</rosparam>
 
     <!-- ③ 이진화 최소 응답 (Otsu 가 이보다 낮게는 못 내려감)
          정지선이 없을 때 Otsu 가 노이즈 한가운데를 임계로 잡는 것을 막습니다 -->
     <param name="min_response" value="25"/>
+
+    <!-- ⑤ 흰색 게이트 (09-18) — DBD 는 '위아래보다 밝은 띠' 면 응답해서
+         모래·자갈·밝은 흙까지 잡습니다. 도료는 무채색이고 노면보다 확실히 밝다는
+         점으로 한 번 더 거릅니다. 형태 연산 전에 걸러 close 가 알갱이를 잇지 않습니다.
+           white_max_sat    HSV 채도 상한 (낮출수록 엄격 — 흰색만)
+           white_val_margin ROI 밝기 중앙값에 이만큼 더한 값 이상만 통과 (올릴수록 엄격)
+         ★ V 는 절대값이 아니라 ROI 중앙값 기준 상대값입니다 — 절대 밝기로 자르면
+           그늘·역광에서 정지선을 통째로 놓칩니다.
+         ★ 25/50 은 videos/stopline2.mp4 실측으로 정한 값입니다 (09-18):
+             도료 S 중앙 8~12 · V 219~224  /  모래 S 중앙 26~29 · V 135~139
+             게이트 없음 대비 노면 잡음 0.068 → 0.001, 정지선 행채움률은 그대로.
+         튜닝: 모래가 더 남으면 20/60 (더 깨끗하지만 그늘 도료를 놓칠 위험).
+               viz(/perception/stopline/viz/compressed) 의 마스크로 확인하세요. -->
+    <param name="white_gate"       value="true"/>
+    <param name="white_max_sat"    value="25"/>
+    <param name="white_val_margin" value="50"/>
 
     <!-- ④ 모폴로지 — 열기(잡음 제거) 후 닫기(페인트 구멍 메우기) -->
     <param name="open_width"  value="3"/>

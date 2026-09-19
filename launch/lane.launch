@@ -10,6 +10,6 @@
     <param name="img_size"    value="640"/>
     <param name="device"      value="auto"/>   <!-- 2025 는 기본값이 cpu 였습니다 -->
     <param name="infer_hz"    value="$(arg hz)"/>
-    <param name="viz_hz"      value="5"/>
+    <param name="viz_hz"      value="$(arg hz)"/>
   </node>
 </launch>

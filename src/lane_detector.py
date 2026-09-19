@@ -81,7 +81,7 @@ class LaneDetector(object):
 
         self.img_size = int(rospy.get_param("~img_size", 640))
         self.infer_hz = float(rospy.get_param("~infer_hz", 15.0))
-        self.viz_hz = float(rospy.get_param("~viz_hz", 5.0))
+        self.viz_hz = float(rospy.get_param("~viz_hz", 10.0))
         topic = rospy.get_param("~image_topic",
                                 "/cam_front/color/image_raw/compressed")
 

@@ -9,14 +9,12 @@
          허브 하나에 4대를 물리면 USB 대역폭이 모자라 전송이 밀린다.
          BRIO 좌·우(cone 검출용)를 뺐다. cone.launch 는 지금 입력이 없다.
 
-       ★ cam_front(D455) 는 여기서 안 띄운다 — 기본값 d455:=false
-         실제 주행 스택은 camera_passability/traversability_live.launch 가
-         realsense2_camera 를 띄운다. 그쪽도 2026-09-06 부터 cam_front 이름을
-         쓰므로 토픽 접두어는 여기와 같다 (/cam_front/...).
-         D455 는 한 프로세스만 열 수 있다. 여기서 또 띄우면 나중에 뜬 쪽이
+       ★ cam_front(D455) 는 d455:=true 로 켠다 (기본값 false) → /cam_front/...
+             roslaunch mando_vision_2026 cameras.launch d455:=true
+         D455 는 한 프로세스만 열 수 있다. 다른 곳(rs_camera.launch 등)에서
+         또 띄우면 나중에 뜬 쪽이
              "Device or resource busy" / "failed to set power state"
-         로 죽는다. 아래 d455:=true 는 traversability 를 안 띄우고
-         카메라만 볼 때(캘리브·화각 확인)만 쓸 것.
+         로 죽는다.
 
        ★ 노드 이름 = 토픽 접두어
          usb_cam_node 는 자기 노드의 private 네임스페이스에 발행한다.
@@ -46,13 +44,17 @@
   <arg name="exposure" default="200"/>   <!-- 야외: 20~60 -->
   <arg name="gain"     default="150"/>   <!-- 야외: 0~50 -->
   <arg name="wb"       default="4500"/>
+  <!-- 정지선 카메라를 열지 말지. sensors_all.launch 가 이 인자를 넘긴다
+       (없으면 "unused args [stopline]" 로 기동이 통째로 멈춘다). -->
+  <arg name="stopline"        default="true"/>
   <arg name="stopline_width"  default="640"/>
   <arg name="stopline_height" default="480"/>
 
   <!-- ── C920 하향 : 정지선 (규정 3·5번) ──────────────────────────────
        정지선은 굵은 흰 띠라 해상도가 거의 필요 없다.
        640x480 으로 두어 USB 버스와 CPU 를 아낀다.                      -->
-  <node name="cam_stopline" pkg="usb_cam" type="usb_cam_node"
+  <node if="$(arg stopline)"
+        name="cam_stopline" pkg="usb_cam" type="usb_cam_node"
         output="screen" respawn="true" respawn_delay="2">
     <param name="video_device"       value="/dev/cam_stopline"/>
     <param name="camera_name"        value="cam_stopline"/>
@@ -74,8 +76,7 @@
   <!-- ── D455 (기본 꺼짐) ─────────────────────────────────────────────
        카메라만 단독으로 볼 때:
            roslaunch mando_vision_2026 cameras.launch d455:=true
-       토픽이 /cam_front/... 로 나온다. 주행 스택(/camera/...)과 이름이
-       다르므로, 이걸 켜놓고 traversability 를 띄우지 말 것.
+       토픽이 /cam_front/... 로 나온다 (mando_vision_2026 이 구독하는 이름).
        initial_reset 은 이전 세션이 깨끗하게 안 닫혔을 때 생기는
        "Resource temporarily unavailable" 을 예방한다.                  -->
   <arg name="d455"       default="false"/>

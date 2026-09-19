@@ -1,14 +1,49 @@
 <launch>
-  <!-- 장애물 + 신호제어차량 지시 (obstacle.pt)
+  <!-- 장애물 + 신호제어차량 지시 (obstacle.engine) + base_link 지면 좌표
 
-       roslaunch mando_vision_2026 obstacle.launch
-       rqt_image_view /perception/obstacle/viz/compressed
+       roslaunch mando_vision_2026 obstacle.launch              실물 T870 (용인, 기본)
+       roslaunch mando_vision_2026 obstacle.launch cone:=true   T870 없이 콘으로 대신
+
+       rostopic echo /perception/obstacle        ← 제어팀 (base_link x, y)
        rostopic echo /perception/sign_car
+       rqt_image_view /perception/obstacle/viz/compressed
+       RViz: Fixed Frame base_link, MarkerArray /perception/obstacle/viz/markers
+
+       ★ obstacle_detector 와 ground_markers 는 항상 같이 떠야 합니다.
+           obstacle_detector ─ /detect/obstacle ─┐
+          (cone_detector     ─ /detect/cone)    ─┴─ ground_markers ─ /perception/obstacle
+         cone_detector 는 cone:=true 일 때만 뜹니다 (괄호).
+         /perception/obstacle 의 발행자는 ground_markers 하나뿐입니다.
+
+       S자 코스 뎁스 (depth:=true, 기본):
+           /detect/* + D455 aligned depth ─ obstacle_depth ─ /obstacles/camera   ← 제어 (S_COURSE 만)
+                                                          └ /perception/obstacle_depth (bev_viz 확인용)
+         D455 를 cameras.launch d455_depth:=true(기본) 로 띄워야 뎁스가 온다.
   -->
   <arg name="image"  default="/cam_front/color/image_raw/compressed"/>
-  <arg name="model"  default="$(find mando_vision_2026)/weights/obstacle.pt"/>
+  <arg name="model"  default="$(find mando_vision_2026)/weights/obstacle.engine"/>
   <arg name="imgsz"  default="960"/>
   <arg name="hz"     default="15"/>
+  <arg name="depth"  default="true"/>
+  <arg name="depth_topic" default="/cam_front/aligned_depth_to_color/image_raw"/>
+
+  <!-- 콘 대역(代役) — 기본 꺼짐.
+       2026-09-19 용인부터 실물 T870 을 쓰므로 껐습니다. 송도 테스트 때는
+       T870 이 없어 콘을 대신 세웠고, 그때만 cone:=true 였습니다.
+
+       ★ 켜면 세 군데가 같이 바뀝니다. 끄는 이유이기도 합니다.
+           · cone_detector 가 같은 D455 영상을 또 추론 (GPU 중복)
+           · /perception/obstacle 에 cone_blue/cone_yellow 가 섞임
+           · /obstacles/camera (S코스 제어 입력) 에도 섞임
+         실물 T870 구간에서 켜 두면 콘 오검출이 제어로 그대로 들어갑니다.
+
+       ★ 콘은 .pt 로 씁니다 (차량 노트북에 cone.engine 없음).
+         엔진을 만들면 cone_model:=.../weights/cone.engine — 시동 로그의
+         "[cone] cone.pt (PyTorch, ...)" 로 어느 쪽인지 확인하세요.
+       ★ 엔진은 export imgsz 로 고정됩니다. cone_imgsz 는 classes.yaml cone.imgsz 와 같게. -->
+  <arg name="cone"       default="false"/>
+  <arg name="cone_model" default="$(find mando_vision_2026)/weights/cone.pt"/>
+  <arg name="cone_imgsz" default="640"/>
 
   <node pkg="mando_vision_2026" type="obstacle_detector.py"
         name="obstacle_detector" output="screen" respawn="true">
@@ -22,11 +57,18 @@
     <param name="imgsz"   value="$(arg imgsz)"/>
 
     <param name="rate_hz" value="$(arg hz)"/>
-    <param name="viz_hz"  value="5"/>
+    <!-- viz 는 루프와 같은 주기로. JPEG 인코딩이 1280x720 q70 에서 4 ms 라
+         추론 12 ms 와 합쳐도 66 ms 예산 안이고, 구독자가 없으면 아예 안 돈다.
+         5 로 두면 루프 격자와 어긋나 실측 4.4 Hz 가 나와 눈으로 못 쫓는다 (09-19). -->
+    <param name="viz_hz"  value="$(arg hz)"/>
 
     <!-- 모델 자체의 1차 임계. 여기서 너무 높이면 아래 비대칭 임계가
          의미를 잃습니다. 낮게 두고 sign/* 에서 거르세요. -->
     <param name="conf"    value="0.20"/>
+
+    <!-- 전체 검출을 ground_markers 로 (내부 배선, /perception 밖) -->
+    <param name="detections_topic" value="/detect/obstacle"/>
+    <param name="frame_id"         value="cam_front_color_optical_frame"/>
 
     <!-- ══ 신호제어차량 판정 ══════════════════════════════════════
          ↓(go) 는 초록 화살표라 형태·색이 뚜렷하고,
@@ -48,5 +90,102 @@
     <!-- 시간 다수결 -->
     <param name="sign/vote_window" value="7"/>
     <param name="sign/vote_min"    value="4"/>
+
+    <!-- S자 코스 첫 T870 좌/우 → /perception/s_course/right (커밋 후 고정).
+         먼 거리는 yaw 오차가 횡방향으로 들어오므로 max_x 안쪽만 센다.
+         min_abs_y 와 투표 수는 실측 전 임시값이다. -->
+    <param name="s_course/max_x"       value="10.0"/>
+    <param name="s_course/min_abs_y"   value="0.10"/>
+    <param name="s_course/vote_window" value="7"/>
+    <param name="s_course/vote_min"    value="5"/>
+
+    <!-- 미션 게이트: 이 모델을 쓰는 구역에서만 추론한다. S자 코스는 커밋이 고정이라
+         구간 안에서만 판정하고 나가면 초기화한다. GRM 토픽이 없으면 항상 켜진다. -->
+    <param name="gate/enable"    value="true"/>
+    <param name="gate/stale_sec" value="2.0"/>
+    <rosparam param="gate/missions">{S_COURSE: 0.0, SUDDEN_STOP: 10.0, SIGNAL_VEHICLE: 10.0}</rosparam>
+  </node>
+
+  <!-- 콘 검출 — 전방 D455. 시각화는 /detect/cone/viz/compressed -->
+  <node if="$(arg cone)" pkg="mando_vision_2026" type="object_detector.py"
+        name="cone_detector" output="screen" respawn="true">
+    <param name="section"          value="cone"/>
+    <param name="weights"          value="$(arg cone_model)"/>
+    <param name="imgsz"            value="$(arg cone_imgsz)"/>
+    <param name="image_topic"      value="$(arg image)"/>
+    <param name="detections_topic" value="/detect/cone"/>
+    <param name="frame_id"         value="cam_front_color_optical_frame"/>
+    <param name="confidence"       value="0.5"/>
+    <param name="iou"              value="0.45"/>
+    <param name="infer_hz"         value="10"/>
+    <rosparam param="roi">[]</rosparam>
+  </node>
+
+  <!-- 2D 검출 -> base_link 좌표 -> /perception/obstacle (유일한 발행자)
+       ★ 판정은 제어팀이 합니다. 여기서는 x, y 만 냅니다 (side/sigma 없음).
+       ★ labels 에 없는 라벨은 버립니다. traffic_car 를 장애물 목록에 넣으려면
+         obstacle 소스 labels 에 추가하세요.                                   -->
+  <node pkg="mando_vision_2026" type="ground_markers.py"
+        name="ground_markers" output="screen" respawn="true">
+    <rosparam if="$(arg cone)" param="sources">
+      - {topic: /detect/obstacle, section: obstacle, labels: [T870, kid]}
+      - {topic: /detect/cone,     section: cone,     labels: [cone_blue, cone_yellow]}
+    </rosparam>
+    <rosparam unless="$(arg cone)" param="sources">
+      - {topic: /detect/obstacle, section: obstacle, labels: [T870, kid]}
+    </rosparam>
+
+    <param name="rate_hz"        value="$(arg hz)"/>
+    <!-- RViz 마커도 같은 이유로 루프 주기 (09-19) -->
+    <param name="viz_hz"         value="$(arg hz)"/>
+    <param name="source_timeout" value="0.5"/>
+
+    <!-- 트래킹 (지면 x, y 최근접) + 시간 투표. stable=false 도 발행합니다 -->
+    <param name="track_gate_m"   value="0.8"/>
+    <param name="track_miss_max" value="5"/>
+    <param name="vote_window"    value="5"/>
+    <param name="vote_min"       value="3"/>
+
+    <!-- 카메라 기하는 utils/ground.py from_params 기본값(URDF 실측)을 씁니다.
+         x_err = pitch 를 ±pitch_tol_deg 흔들었을 때 x 의 폭 -->
+    <param name="ground/pitch_tol_deg" value="0.5"/>
+
+    <!-- 자가검증: 복원 높이 z 가 이 값과 20% 넘게 다르면 pitch 캘리브레이션 경고 -->
+    <rosparam param="height_expect">{cone_blue: 0.45, cone_yellow: 0.45, T870: 0.40, kid: 0.60}</rosparam>
+  </node>
+
+  <!-- S자 코스 전용: bbox + 정렬 뎁스 -> /obstacles/camera (base_link 점).
+       ★ 뎁스는 박스마다 지면 투영과 대조해 맞을 때만 쓴다. 역광·반사로 뎁스가 틀어지면
+         그 박스는 지면 투영 점으로 대신한다. 어느 쪽을 썼는지는 /perception/obstacle_depth.
+       ★ S자 코스 좌/우 Bool(/perception/s_course/right) 은 이 노드와 무관하게 지면 투영으로 판정한다.
+       bag 재생: depth_topic:=/cam_front/aligned_depth_to_color/image_raw/compressedDepth -->
+  <node if="$(arg depth)" pkg="mando_vision_2026" type="obstacle_depth.py"
+        name="obstacle_depth" output="screen" respawn="true">
+    <param name="depth_topic" value="$(arg depth_topic)"/>
+    <param name="rate_hz"     value="$(arg hz)"/>
+    <rosparam if="$(arg cone)" param="sources">
+      - {topic: /detect/obstacle, section: obstacle, labels: [T870]}
+      - {topic: /detect/cone,     section: cone,     labels: [cone_blue, cone_yellow]}
+    </rosparam>
+    <rosparam unless="$(arg cone)" param="sources">
+      - {topic: /detect/obstacle, section: obstacle, labels: [T870]}
+    </rosparam>
+
+    <!-- 대조 허용오차 = max(tol_abs_m, tol_rel × 지면거리, pitch ±0.5° 거리폭).
+         09-16 송도 bag (pitch 보정 후) 뎁스-지면 |차| p90 이 3~5 m 에서 0.34 m 였다. -->
+    <param name="depth/tol_abs_m"  value="0.30"/>
+    <param name="depth/tol_rel"    value="0.15"/>
+    <!-- D455 뎁스 오차는 거리 제곱으로 커진다. 이보다 먼 박스는 지면 투영만 쓴다 -->
+    <param name="depth/max_m"      value="8.0"/>
+    <param name="depth/min_cols"   value="3"/>
+    <param name="depth/percentile" value="30"/>
+    <param name="depth/sync_sec"   value="0.05"/>
+
+    <!-- 노면 뎁스 평면 pitch 가 ~ground/cam_pitch_deg 와 이만큼 넘게 다르면 경고 -->
+    <param name="plane/warn_deg"   value="1.0"/>
+
+    <param name="gate/enable"    value="true"/>
+    <param name="gate/stale_sec" value="2.0"/>
+    <rosparam param="gate/missions">{S_COURSE: 0.0}</rosparam>
   </node>
 </launch>

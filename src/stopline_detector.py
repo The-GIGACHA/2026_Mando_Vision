@@ -23,13 +23,28 @@ stopline_detector.py — 정지선 검출 (OpenCV)
     정지선이 2*tau 보다 두꺼우면 내부 픽셀은 위아래가 전부 밝아
     응답이 0 이 됩니다.
 
-    C920(높이 0.485 m, pitch 27도, 640x480) 기준 30cm 정지선의 두께:
-        2.0 m 앞  20 px      1.0 m 앞  58 px
-        1.5 m 앞  31 px      0.8 m 앞  79 px
-                             0.6 m 앞 115 px
-    단일 tau 로는 이 범위를 못 덮습니다. tau=30 이면 1.5 m 밖에서만
+    ★ 2026-09-18 정정 — 아래 표는 URDF(urdf/gigacha_sensors.urdf.xacro) 실측 기하로
+      다시 계산한 값입니다. 그 전에는 높이 0.485 m / pitch 27도로 적혀 있었는데
+      실측(지면 0.830 m, pitch 28도)과 달라 두께가 20~40% 얇게 잡혀 있었습니다.
+
+    C920(지면 높이 0.830 m, pitch 28도, 640x480, 수평화각 70.4° → fx≈454 px)
+    기준 30cm 정지선의 두께:
+        3.0 m 앞  11 px      1.2 m 앞  46 px
+        2.0 m 앞  22 px      1.0 m 앞  58 px
+        1.5 m 앞  33 px      0.8 m 앞  76 px
+                             0.6 m 앞 104 px
+
+    ★ fx 는 스펙 화각에서 유도한 값입니다. /cam_stopline/camera_info 가 전부 0 이라
+      (usb_cam 에 캘리브레이션 yaml 이 없음) 실측 K 로 확인하지 못했습니다.
+    단일 tau 로는 이 범위를 못 덮습니다. tau=30 이면 1.0 m 밖에서만
     잡히고, 정작 정밀 정지가 필요한 근거리에서 눈이 멉니다.
-    여러 tau 의 응답 최댓값을 취하면 15~100 px 를 한 번에 덮습니다.
+    tau 는 '선 두께의 절반보다 커야' y±tau 가 노면에 닿습니다:
+        3.0 m(11 px) → tau ≥ 6    1.0 m(58 px) → tau ≥ 29
+        2.0 m(22 px) → tau ≥ 11   0.8 m(76 px) → tau ≥ 38
+        1.5 m(33 px) → tau ≥ 17   0.6 m(104 px) → tau ≥ 52
+    그래서 [15, 30, 55] 로 0.6~3.0 m 를 덮습니다 (09-18, 그 전 [20,45,80]).
+    tau_max 를 80 에서 55 로 내리면 ROI 최소 높이도 320 → 220 px 로 낮아져
+    노면만 남기는 좁은 ROI 를 쓸 수 있습니다.
 
  ② ROI 높이 경고
     resp 의 위아래 tau 행은 0 으로 지웁니다. ROI 가 얕으면 유효 구간이
@@ -83,7 +98,7 @@ class StoplineDetector(object):
         topic = rospy.get_param("~image_topic",
                                 "/cam_stopline/image_raw/compressed")
         self.rate_hz = float(rospy.get_param("~rate_hz", 15.0))
-        self.viz_hz = float(rospy.get_param("~viz_hz", 5.0))
+        self.viz_hz = float(rospy.get_param("~viz_hz", 10.0))
 
         self.roi = rospy.get_param("~roi", [])
         if self.roi and len(self.roi) != 4:
@@ -102,6 +117,15 @@ class StoplineDetector(object):
             raise SystemExit(1)
 
         self.min_resp = int(rospy.get_param("~min_response", 25))
+
+        # ── 흰색 게이트 ─────────────────────────────────────────
+        #   DBD 는 '위아래보다 밝은 띠' 면 응답해서 모래·자갈·밝은 흙도 잡습니다.
+        #   도료는 채도가 낮고(무채색) 노면보다 확실히 밝다는 점으로 한 번 더 거릅니다.
+        #   ★ V 는 절대값이 아니라 ROI 중앙값 기준 상대값입니다 — 절대 밝기로 자르면
+        #     그늘·역광에서 정지선을 통째로 놓칩니다 (이 노드의 설계 전제).
+        self.white_gate = bool(rospy.get_param("~white_gate", True))
+        self.white_max_sat = int(rospy.get_param("~white_max_sat", 25))
+        self.white_val_margin = int(rospy.get_param("~white_val_margin", 50))
 
         self.open_w = int(rospy.get_param("~open_width", 3))
         self.close_w = int(rospy.get_param("~close_width", 25))
@@ -149,6 +173,14 @@ class StoplineDetector(object):
                       "(%.0f Hz, taus=%s, 각도탐색 %d개, 거리환산=%s)",
                       self.rate_hz, self.taus, len(self.angles),
                       "ON" if self.H is not None else "OFF")
+        if self.white_gate:
+            rospy.logwarn("흰색 게이트 ON — 채도 S ≤ %d, 밝기 V ≥ ROI중앙값 + %d 만 통과. "
+                          "모래·자갈이 계속 잡히면 white_max_sat 을 낮추거나 "
+                          "white_val_margin 을 올리고, 정지선을 놓치면 반대로 하세요 "
+                          "(~white_gate:=false 로 끕니다)",
+                          self.white_max_sat, self.white_val_margin)
+        else:
+            rospy.logwarn("흰색 게이트 OFF — DBD 응답만 씁니다 (모래·자갈도 잡힙니다)")
 
     # ── 호모그래피 ───────────────────────────────────────────────
     def _build_homography(self, img_pts, wld_pts):
@@ -225,13 +257,28 @@ class StoplineDetector(object):
             return np.zeros_like(gray)
         return np.clip(acc, 0, 255).astype(np.uint8)
 
-    def _marking_mask(self, gray):
+    def _white_mask(self, bgr):
+        """흰 도료만 남기는 마스크. 채도 낮고(S ≤ white_max_sat) ROI 중앙값보다
+        white_val_margin 이상 밝은(V) 픽셀만 통과시킵니다.
+
+        모래·자갈은 채도가 있고, 밝아 보여도 노면 중앙값 대비 여유가 작습니다.
+        """
+        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        sat, val = hsv[:, :, 1], hsv[:, :, 2]
+        v_ref = float(np.median(val))
+        ok = (sat <= self.white_max_sat) & (val >= v_ref + self.white_val_margin)
+        return (ok.astype(np.uint8) * 255), v_ref
+
+    def _marking_mask(self, gray, white=None):
         resp = self._dbd(gray)
         th, _ = cv2.threshold(resp, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         # Otsu 는 정지선이 없을 때 노이즈 한가운데를 임계로 잡습니다.
         # min_response 가 그 바닥을 막아줍니다.
         th = max(th, float(self.min_resp))
         _, m = cv2.threshold(resp, th, 255, cv2.THRESH_BINARY)
+        if white is not None:
+            # 형태 연산 전에 걸러야 close 가 모래 알갱이를 이어 붙이지 않습니다
+            m = cv2.bitwise_and(m, white)
         if self.open_w > 1:
             k = cv2.getStructuringElement(cv2.MORPH_RECT, (self.open_w, 1))
             m = cv2.morphologyEx(m, cv2.MORPH_OPEN, k)
@@ -314,7 +361,8 @@ class StoplineDetector(object):
         """이미지 1장 → (측정값 dict 또는 None, 횡단보도 여부, 시각화용 중간결과)"""
         roi_img, (ox, oy) = self.crop(img)
         gray = cv2.cvtColor(roi_img, cv2.COLOR_BGR2GRAY)
-        mask, th = self._marking_mask(gray)
+        white, v_ref = self._white_mask(roi_img) if self.white_gate else (None, None)
+        mask, th = self._marking_mask(gray, white)
         ang, sheared = self._best_shear(mask)
         bands, _fill = self._bands(sheared)
 
@@ -333,7 +381,7 @@ class StoplineDetector(object):
                 "distance_m": self._to_ground(cx, near),
             }
         dbg = {"mask": mask, "off": (ox, oy), "angle": ang,
-               "bands": bands, "th": th}
+               "bands": bands, "th": th, "v_ref": v_ref}
         return meas, crosswalk, dbg
 
     def emit(self, meas, crosswalk):
@@ -346,6 +394,9 @@ class StoplineDetector(object):
 
         d = {"detected": bool(stable), "crosswalk": bool(crosswalk),
              "votes": n, "window": self.vote_win,
+             "white_gate": (None if not self.white_gate else
+                            {"max_sat": self.white_max_sat,
+                             "val_margin": self.white_val_margin}),
              "row": None, "thickness_px": None, "angle_deg": None,
              "fill": None, "distance_m": None,
              "image_stamp": None, "age_ms": None}

@@ -5,6 +5,8 @@
 weights/*.pt
 weights/*.engine
 weights/*.onnx
+# export 기록 (드라이버 버전·호스트명) — 머신마다 다릅니다
+weights/*.json
 
 __pycache__/
 *.pyc

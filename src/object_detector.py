@@ -22,7 +22,8 @@ object_detector.py — 콘 / 배달표지판 공용 YOLO 검출 노드 (2026)
 
 파라미터
   ~section        classes.yaml 의 섹션명: "cone" 또는 "delivery_sign"
-  ~weights        .pt 경로
+  ~weights        .pt 또는 .engine 경로 (.engine 은 CUDA 필수)
+  ~imgsz          추론 해상도. 기본값은 classes.yaml 섹션의 imgsz
   ~image_topic    입력
   ~detections_topic 출력 (vision_msgs/Detection2DArray)
   ~frame_id       Detection2DArray.header.frame_id (카메라 optical frame 권장)
@@ -75,7 +76,7 @@ class ObjectDetector(object):
         self.conf_th = float(rospy.get_param("~confidence", 0.5))
         self.iou_th = float(rospy.get_param("~iou", 0.45))
         self.infer_hz = float(rospy.get_param("~infer_hz", 10.0))
-        self.viz_hz = float(rospy.get_param("~viz_hz", 5.0))
+        self.viz_hz = float(rospy.get_param("~viz_hz", 10.0))
         self.frame_id = rospy.get_param("~frame_id", "cam_front_optical_frame")
         self.roi = rospy.get_param("~roi", [])
         if self.roi and len(self.roi) != 4:
@@ -97,18 +98,36 @@ class ObjectDetector(object):
             raise SystemExit(1)
 
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        ext = os.path.splitext(weights)[1].lower()
+        if ext == ".engine" and self.device == "cpu":
+            # ★ 엔진은 GPU 전용입니다. CPU 폴백으로 조용히 넘어가지 않습니다.
+            rospy.logfatal("[%s] %s 는 TensorRT 엔진인데 CUDA 를 쓸 수 없습니다. 종료합니다.",
+                           self.section, os.path.basename(weights))
+            raise SystemExit(1)
         rospy.loginfo("[%s] 모델 로드: %s (device=%s)",
                       self.section, weights, self.device)
-        self.model = YOLO(weights)
-        self.model.to(self.device)
+        # ★ task 명시 — 엔진 메타데이터가 불완전하면 task 추론에 실패합니다
+        self.model = YOLO(weights, task="detect")
+        if ext == ".pt":
+            # .engine/.onnx 는 PyTorch 모듈이 아니라 .to() 가 TypeError 로 거부합니다.
+            # device 는 predict() 에 직접 넘깁니다.
+            self.model.to(self.device)
 
         sec = class_map.load_and_verify(self.section, self.model.names)
         self.names = sec["names"]
+        # ★ TensorRT 엔진은 export 시점 imgsz 로 고정됩니다. rosparam > classes.yaml
+        self.imgsz = int(rospy.get_param("~imgsz", sec.get("imgsz", 640)))
+        # 대회 당일 .pt 로 돌고 있는 걸 모르는 상황을 막으려고 포맷을 남깁니다
+        rospy.loginfo("[%s] %s (%s, imgsz=%d, device=%s)", self.section,
+                      os.path.basename(weights),
+                      {".engine": "TensorRT", ".pt": "PyTorch",
+                       ".onnx": "ONNX"}.get(ext, ext or "?"),
+                      self.imgsz, self.device)
 
         topic = rospy.get_param("~image_topic",
                                 "/cam_left/image_raw/compressed")
         out_topic = rospy.get_param("~detections_topic",
-                                    "/perception/%s/detections" % self.section)
+                                    "/detect/%s" % self.section)
 
         self.frame = LatestFrame(topic)
         self.pub = rospy.Publisher(out_topic, Detection2DArray, queue_size=1)
@@ -149,8 +168,9 @@ class ObjectDetector(object):
             arr.header.stamp = header.stamp  # 카메라 타임스탬프 보존 (융합용)
 
         roi_img, (ox, oy) = self.crop(img)
-        res = self.model.predict(roi_img, conf=self.conf_th, iou=self.iou_th,
-                                 device=self.device, verbose=False)[0]
+        res = self.model.predict(roi_img, imgsz=self.imgsz, conf=self.conf_th,
+                                 iou=self.iou_th, device=self.device,
+                                 verbose=False)[0]
 
         drawn = []
         if res.boxes is not None:
