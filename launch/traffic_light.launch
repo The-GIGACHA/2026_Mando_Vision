@@ -8,15 +8,21 @@
        안 잡힙니다. 신호등 모델은 640 으로 학습됐습니다. -->
   <arg name="imgsz" default="640"/>
 
-  <!-- 가중치. 기본은 차량 노트북에서 export 한 TensorRT 엔진입니다
-       (tools/export_trt.py 의 traffic_light 섹션).
-       ★ 엔진 로드가 실패하면 (파일 없음 / TensorRT·드라이버 불일치로 역직렬화 실패)
-         파일을 고치지 말고 .pt 로 되돌리세요:
+  <!-- 가중치 — 2026-09-20 역광 대응 파인튜닝본이 기본입니다.
+       traffic_light_20250918.pt 에서 30 epoch 이어 학습했고, 클래스 5개와 순서,
+       imgsz 640 은 그대로입니다. 증강을 색상 고정·밝기 위주로 바꿨습니다
+       (hsv_h 0.05→0.0, hsv_s 0.7→0.2, hsv_v 0.7→0.5, mosaic 1.0→0.3).
+
+       ★ 엔진이 아니라 .pt 입니다. GPU 에서 640 추론이 4.6 ms 라 15 Hz(66 ms)
+         예산에 여유가 크고, 엔진은 export 한 그 머신·드라이버에 묶입니다.
+         굳이 만들려면 tools/export_trt.py 의 traffic_light 섹션을 쓰고
+         weights:= 로 넘기세요. 엔진 imgsz 는 위 imgsz 와 같아야 합니다.
+       ★ 새 모델이 의심스러우면 옛 모델로 되돌려 비교하세요:
            roslaunch mando_vision_2026 traffic_light.launch \
              weights:=$(rospack find mando_vision_2026)/weights/traffic_light_20250918.pt
-       ★ 엔진은 export 때 imgsz 로 고정됩니다. 위 imgsz 와 반드시 같아야 합니다. -->
+         bag 으로 나란히 보려면 tools/tl_view.py 의 models 인자에 둘 다 넘깁니다. -->
   <arg name="weights"
-       default="$(find mando_vision_2026)/weights/traffic_light_20250918.pt"/>
+       default="$(find mando_vision_2026)/weights/traffic_light_ft640_v2_20260920.pt"/>
 
   <node pkg="mando_vision_2026" type="traffic_light_detector.py"
         name="traffic_light_detector" output="screen" respawn="true">

@@ -169,7 +169,8 @@ python3 tools/check_weights.py weights
 | `lane.pt` | YOLOPv2 차선/주행영역 (156 MB) | ERP42 `lane.pt` |
 | `cone.pt` | 콘 2종 | ERP42 **`traffic_sign.pt`** ⚠ |
 | `delivery_sign.pt` | 배달표지판 7종 | ERP42 **`sign.pt`** ⚠ |
-| `traffic_light_20250918.pt` | 신호등 5종 (재학습본, 기본 사용) | Mando_Vision |
+| `traffic_light_ft640_v2_20260920.pt` | 신호등 5종 (역광 대응 파인튜닝, **기본 사용**) | 09-18 모델에서 30 ep |
+| `traffic_light_20250918.pt` | 신호등 5종 (위 모델의 베이스, 비교·되돌리기용) | Mando_Vision |
 | `traffic_light_20250901.pt` | 신호등 5종 (구버전, 비교용) | ERP42 |
 
 > ⚠ **2025 저장소는 `sign.pt` 와 `traffic_sign.pt` 의 이름과 내용이 서로
