@@ -10,7 +10,7 @@
     <param name="weights"
            value="$(find mando_vision_2026)/weights/delivery_sign.pt"/>
     <param name="image_topic"      value="$(arg image)"/>
-    <param name="detections_topic" value="/perception/delivery_sign/detections"/>
+    <param name="detections_topic" value="/detect/delivery_sign"/>
     <param name="frame_id"         value="cam_front_color_optical_frame"/>
     <param name="confidence"       value="0.6"/>
     <param name="infer_hz"         value="5"/>

@@ -16,6 +16,10 @@ bev_viz.py — S코스 좌/우 판정을 눈으로 확인하는 BEV 시각화 (�
   닿는 선)만이 진짜 지면 위의 점이고, 그 한 점만 변환하면 충분합니다.
   전체 워핑은 --warp 로 켤 수 있지만 배경 확인용일 뿐 판정 근거가 아닙니다.
 
+★ /perception/obstacle_depth (obstacle_depth 노드, S자 코스만) 가 오면 겹쳐 그립니다.
+  속 빈 흰 원 = 지면 투영, 채운 하늘색 = 뎁스를 썼음, 속 빈 주황 = 뎁스를 버림(이유 표시).
+  역광에서 뎁스가 틀어지는지 여기서 눈으로 봅니다. 하단에 노면 평면 pitch 와 설정 pitch.
+
 ★ 아무도 안 보면 아무 일도 하지 않습니다
   get_num_connections() 게이트 + Throttle. 주행 중에는 viz_hz:=0 으로 끄십시오.
 """
@@ -30,9 +34,23 @@ import rospy
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import String
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from utils.ground import from_params as ground_from_params  # noqa: E402
-from utils.infer_loop import LatestFrame, Throttle  # noqa: E402
+def _add_utils_to_path():
+    """catkin_install_python 이 스크립트를 devel/lib/<pkg>/ 로 복사하므로
+    __file__ 기준 '../utils' 가 거기서는 존재하지 않습니다."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    cand = os.path.join(here, "..", "utils")
+    if not os.path.isdir(cand):
+        import rospkg
+        cand = os.path.join(
+            rospkg.RosPack().get_path("mando_vision_2026"), "utils")
+    if cand not in sys.path:
+        sys.path.insert(0, cand)
+
+
+_add_utils_to_path()
+
+from ground import from_params as ground_from_params   # noqa: E402
+from infer_loop import LatestFrame, Throttle           # noqa: E402
 
 
 class BevCanvas(object):
@@ -78,12 +96,15 @@ class Node(object):
         self.labels = set(g("~labels", ["T870"]))
         self.decide_max = g("~decide_range", 10.0)   # 이 안쪽만 판정에 씀
         self.warp = g("~warp", False)
-        self.thr = Throttle(g("~viz_hz", 5.0))
+        self.thr = Throttle(g("~viz_hz", 10.0))
 
         self.frame = LatestFrame(g("~image", "/cam_front/color/image_raw/compressed"))
         self.det = None
         rospy.Subscriber(g("~obstacle", "/perception/obstacle"),
                          String, self._cb, queue_size=1)
+        self.depth = None
+        rospy.Subscriber(g("~obstacle_depth", "/perception/obstacle_depth"),
+                         String, self._cb_depth, queue_size=1)
         self.pub = rospy.Publisher("/perception/bev/compressed",
                                    CompressedImage, queue_size=1)
         self._Hinv = None
@@ -96,6 +117,47 @@ class Node(object):
             self.det = json.loads(msg.data)
         except ValueError:
             self.det = None
+
+    def _cb_depth(self, msg):
+        try:
+            self.depth = json.loads(msg.data)
+        except ValueError:
+            self.depth = None
+
+    def _draw_depth(self, bev):
+        """obstacle_depth 판정을 겹친다. 1초 넘게 안 왔으면 그리지 않는다."""
+        d = self.depth
+        if not d or rospy.Time.now().to_sec() - d.get("stamp", 0.0) > 1.0:
+            return
+        c = self.canvas
+        for it in d.get("items") or []:
+            gr, dp = it.get("ground"), it.get("depth") or {}
+            if gr is None:
+                continue
+            gp = c.xy2px(gr["x"], gr["y"])
+            cv2.circle(bev, gp, 9, (240, 240, 240), 1)
+            if "x" in dp:
+                dpx = c.xy2px(dp["x"], dp["y"])
+                cv2.line(bev, gp, dpx, (200, 200, 200), 1)
+                if it["used"] == "depth":
+                    cv2.circle(bev, dpx, 6, (255, 220, 60), -1)
+                else:
+                    cv2.circle(bev, dpx, 7, (0, 140, 255), 2)
+                txt = "d%.2f g%.2f %s" % (dp["x"], gr["x"], it["reason"])
+            else:
+                txt = "g%.2f %s" % (gr["x"], it["reason"])
+            col = (255, 220, 60) if it["used"] == "depth" else (0, 140, 255)
+            cv2.putText(bev, txt, (gp[0] - 60, gp[1] + 24),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, col, 1)
+        pl = d.get("plane")
+        lines = ["depth %s" % ("ON" if d.get("active") else "off (%s)" % (d.get("gate") or {}).get("mode"))]
+        if pl:
+            # 캔버스 폭이 216 px(기본)까지 좁아지므로 짧게 두 줄로
+            lines.append("pitch %+.2f cfg %+.2f" % (
+                pl["pitch_deg"], d.get("ground_pitch_deg", math.degrees(self.G.th))))
+        # 아래쪽은 가까운 장애물이 그려지는 자리라 위쪽 표(최대 4줄) 밑에 둔다
+        for k, txt in enumerate(lines):
+            cv2.putText(bev, txt, (8, 120 + 16 * k), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 220, 60), 1)
 
     # ── 전체 워핑 (배경 확인용, 기본 off) ──────────────────────────────
     def _warp_map(self, shape):
@@ -120,10 +182,9 @@ class Node(object):
         # 아무도 안 보면 인코딩도 변환도 하지 않습니다.
         if self.pub.get_num_connections() == 0 or not self.thr.ready():
             return
-        got = self.frame.get()
-        if got is None:
+        im, hdr = self.frame.take()
+        if im is None:
             return
-        im, hdr = got
 
         if self.warp:
             mu, mv = self._warp_map(im.shape)
@@ -172,6 +233,8 @@ class Node(object):
                         % (lb, X, Y, s, ns, cf or 0),
                         (8, 44 + 18 * i), cv2.FONT_HERSHEY_SIMPLEX,
                         0.45, (200, 200, 200), 1)
+
+        self._draw_depth(bev)
 
         age = (self.det or {}).get("age_ms")
         if age is not None and age > 300:

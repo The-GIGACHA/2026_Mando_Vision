@@ -28,7 +28,7 @@ class Ground(object):
 
     def __init__(self, fx, fy, cx, cy, h, pitch_deg, x_off=0.0, y_off=0.0):
         """h: 광학중심의 지면 높이 [m]
-        pitch_deg: 아래를 보면 +, 위를 보면 - (D455 는 -1.0)
+        pitch_deg: 아래를 보면 +, 위를 보면 - (D455 는 -2.75)
         x_off, y_off: base_link 원점에서 광학중심까지 [m], y 는 좌측이 +
         """
         self.fx, self.fy, self.cx, self.cy = fx, fy, cx, cy
@@ -101,6 +101,7 @@ def from_params(get, prefix="~ground/"):
         fx=get(p + "fx", 644.1228), fy=get(p + "fy", 643.3088),
         cx=get(p + "cx", 646.2876), cy=get(p + "cy", 354.2151),
         h=get(p + "cam_height", 1.000),        # front_z 0.850 + wheel_radius 0.150
-        pitch_deg=get(p + "cam_pitch_deg", -1.0),
+        # 2026-09-17 -1.0 -> -2.75 (09-16 송도 bag 노면 뎁스 평면). URDF front_pitch 와 같이 바꿨다.
+        pitch_deg=get(p + "cam_pitch_deg", -2.75),
         x_off=get(p + "cam_x", 0.725),
         y_off=get(p + "cam_y", -0.060))        # RGB 광축은 차체 중심 우측 6cm

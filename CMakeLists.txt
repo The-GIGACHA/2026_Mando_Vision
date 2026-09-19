@@ -22,6 +22,8 @@ catkin_install_python(PROGRAMS
   src/obstacle_detector.py
   src/detection_monitor.py
   src/bev_viz.py
+  src/ground_markers.py
+  src/obstacle_depth.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

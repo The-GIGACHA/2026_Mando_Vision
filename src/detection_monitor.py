@@ -74,9 +74,11 @@ class Monitor(object):
                          self._cb_json, callback_args="tl", queue_size=1)
         rospy.Subscriber("/perception/lane", String,
                          self._cb_json, callback_args="lane", queue_size=1)
-        rospy.Subscriber("/perception/cone/detections", Detection2DArray,
+        # ★ 내부 배선은 /perception 밖입니다. 구독만 해도 rostopic list 에 뜨므로
+        #   옛 /perception/... 이름을 구독하면 데이터 토픽 규약이 깨져 보입니다.
+        rospy.Subscriber("/detect/cone", Detection2DArray,
                          self._cb_cone, queue_size=1)
-        rospy.Subscriber("/perception/delivery_sign/detections",
+        rospy.Subscriber("/detect/delivery_sign",
                          Detection2DArray, self._cb_sign, queue_size=1)
         rospy.Subscriber("/planning/intent", String, self._cb_intent,
                          queue_size=1)
@@ -148,14 +150,14 @@ class Monitor(object):
                   % (self.tl.get("votes"), self.tl.get("window")))
 
         # 차선
-        print("\n[ LANE (YOLOPv2) ]  %s" % self._badge(self.lane))
-        if self.lane:
-            ms = self.lane.get("infer_ms")
-            fps = (1000.0 / ms) if ms else 0.0
-            print("   lane px    : %.3f %%" % (self.lane.get("lane_ratio", 0) * 100))
-            print("   drivable   : %.1f %%" % (self.lane.get("drivable_ratio", 0) * 100))
-            print("   inference  : %s ms  (%.1f FPS)"
-                  % (ms, fps) if ms else "   inference  : —")
+        # print("\n[ LANE (YOLOPv2) ]  %s" % self._badge(self.lane))
+        # if self.lane:
+            # ms = self.lane.get("infer_ms")
+            # fps = (1000.0 / ms) if ms else 0.0
+            # print("   lane px    : %.3f %%" % (self.lane.get("lane_ratio", 0) * 100))
+            # print("   drivable   : %.1f %%" % (self.lane.get("drivable_ratio", 0) * 100))
+            # print("   inference  : %s ms  (%.1f FPS)"
+                  # % (ms, fps) if ms else "   inference  : —")
 
         # 객체
         for title, (n, t) in (("CONE", self.cones), ("DELIVERY SIGN", self.signs)):

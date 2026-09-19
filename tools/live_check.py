@@ -129,13 +129,20 @@ class Model(object):
 
         # 2) Ultralytics
         from ultralytics import YOLO
-        m = YOLO(path)
-        m.to(self.dev)
+        # .engine / .onnx 는 PyTorch 모듈이 아니라 .to() 를 거부합니다.
+        # task 도 자동 추론이 안 되므로 명시합니다 (자동 추정 경고 제거).
+        is_pt = path.endswith(".pt")
+        m = YOLO(path) if is_pt else YOLO(path, task="detect")
+        if is_pt:
+            # 아래 predict() 가 device 를 직접 넘기므로 필수는 아니지만,
+            # 첫 추론 전에 올려두면 워밍업 시간이 앞당겨집니다.
+            m.to(self.dev)
         self.net = m
         self.kind = "ultralytics"
         self.names = {int(k): clean_name(v) for k, v in dict(m.names).items()}
-        print("[%s] Ultralytics   device=%s  imgsz=%d   classes=%s"
-              % (self.label, self.dev, self.imgsz, self.names))
+        print("[%s] Ultralytics %s  device=%s  imgsz=%d   classes=%s"
+              % (self.label, "(.pt)" if is_pt else "(TensorRT)",
+                 self.dev, self.imgsz, self.names))
 
     # ── 추론 ────────────────────────────────────────────────────────
     def run(self, im, vis):
