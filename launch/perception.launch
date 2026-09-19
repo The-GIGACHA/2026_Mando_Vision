@@ -35,13 +35,22 @@
   <arg name="monitor"       default="true"/>
 
   <!-- ── 모델 해상도 ──────────────────────────────────────────────────
-       ★ 학습 imgsz = export imgsz = 런타임 imgsz 세 군데가 같아야 한다.
-         obstacle 을 960 으로 올린 이유: 신호제어차량 LED 패널이
-         640 기준 17 px 밖에 안 돼서 640 으로는 학습도 검출도 안 된다.
-         960 이면 같은 패널이 25.7 px 이 된다.
+       2026-09-20 둘 다 1280 으로. 쓰는 모델이 traffic_light, obstacle
+       두 개뿐이라 연산에 여유가 있고, LED 가 덜 뭉개져 더 잘 잡힌다.
+
+       ★ 1280 이 상한이다. D455 색상이 1280x720, 신호등 ROI 가 1280x480 이라
+         1280 이면 다운스케일이 0 인 네이티브다. 더 올려봐야 업스케일이라
+         정보는 안 늘고 연산만 는다.
+       ★ 신호제어차량 LED 패널 크기: 640 에서 17 px, 960 에서 25.7 px,
+         1280 에서 34 px.
+       ★ 실측 (RTX 2000 Ada, 15 Hz = 프레임당 66.7 ms 예산):
+             traffic_light 1280x480   8.0 ms  (640 일 때 3.8)
+             obstacle      1280x736  29.1 ms  (960 일 때 11.8)
+             합계 37.1 ms → 예산의 56%. 30 Hz 는 111% 라 불가.
+       ★ obstacle 은 .engine 을 쓸 수 없다. obstacle.launch 주석 참고.
        ──────────────────────────────────────────────────────────────── -->
-  <arg name="obstacle_imgsz"      default="960"/>
-  <arg name="traffic_light_imgsz" default="640"/>
+  <arg name="obstacle_imgsz"      default="1280"/>
+  <arg name="traffic_light_imgsz" default="1280"/>
 
   <include if="$(arg tf)"
            file="$(find mando_vision_2026)/launch/tf.launch"/>

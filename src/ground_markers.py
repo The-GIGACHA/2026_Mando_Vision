@@ -5,7 +5,7 @@ ground_markers.py — 2D 검출 여러 소스 -> base_link 지면 좌표 -> /per
 
   배치 위치:  mando_vision_2026/src/ground_markers.py
 
-  obstacle_detector (obstacle.engine) -> /detect/obstacle ─┐
+  obstacle_detector (obstacle.pt)    -> /detect/obstacle ─┐
   object_detector   (cone.engine)     -> /detect/cone     ─┴-> ground_markers
       -> /perception/obstacle               std_msgs/String (JSON)  매 주기   ← 제어팀
       -> /perception/obstacle/viz/markers   MarkerArray             구독자 있을 때만

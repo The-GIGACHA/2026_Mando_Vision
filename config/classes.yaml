@@ -27,7 +27,7 @@
 #  클래스 5개와 순서, imgsz 640 은 09-18 모델과 같다. 비교는 tools/tl_view.py.
 traffic_light:
   file: "weights/traffic_light_ft640_v2_20260920.pt"
-  imgsz: 640
+  imgsz: 1280        # 09-20 런타임 1280 (학습은 640). ROI 1280x480 네이티브
   names: {0: green_left, 1: green, 2: left, 3: red, 4: yellow}
 
   # left = 적색 + 좌회전 화살표 동시 점등 (직진 금지, 좌회전만 허용)
@@ -56,7 +56,7 @@ traffic_light:
 # ── 장애물 + 신호제어차량 ───────────────────────────────────────────
 obstacle:
   file: "weights/obstacle.pt"
-  imgsz: 960          # ★ 640 이면 LED 패널이 17 px 이라 못 잡습니다
+  imgsz: 1280         # 09-20 960 -> 1280. LED 패널 25.7 px -> 34 px
   # ★ 이 순서는 학습에 쓴 data.yaml 의 순서(= Roboflow 의 ASCII 정렬)입니다.
   #   읽기 좋은 순서로 바꾸지 마십시오. obstacle_detector 는 모델이 뱉은
   #   인덱스를 여기 이름으로 변환하므로(self.names = sec["names"]),

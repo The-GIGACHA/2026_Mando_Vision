@@ -1,5 +1,5 @@
 <launch>
-  <!-- 장애물 + 신호제어차량 지시 (obstacle.engine) + base_link 지면 좌표
+  <!-- 장애물 + 신호제어차량 지시 (obstacle.pt, imgsz 1280) + base_link 지면 좌표
 
        roslaunch mando_vision_2026 obstacle.launch              실물 T870 (용인, 기본)
        roslaunch mando_vision_2026 obstacle.launch cone:=true   T870 없이 콘으로 대신
@@ -21,8 +21,19 @@
          D455 를 cameras.launch d455_depth:=true(기본) 로 띄워야 뎁스가 온다.
   -->
   <arg name="image"  default="/cam_front/color/image_raw/compressed"/>
-  <arg name="model"  default="$(find mando_vision_2026)/weights/obstacle.engine"/>
-  <arg name="imgsz"  default="960"/>
+  <!-- ★ .engine 이 아니라 .pt 입니다 (2026-09-20).
+         obstacle.engine 은 imgsz 960x960 으로 고정 export 돼 있어서
+         1280 을 주면 뜨자마자 죽습니다. respawn 이라 크래시루프가 됩니다:
+           AssertionError: input size torch.Size([1, 3, 1280, 1280])
+                           not equal to max model size (1, 3, 960, 960)
+       ★ 재export 할 이유도 없습니다. 960 에서 재보면 엔진 12.8 ms,
+         .pt 11.8 ms 로 오히려 .pt 가 빠릅니다. 엔진은 정사각 960x960 으로
+         패딩되는데 .pt 는 직사각 960x544 라, TRT 의 픽셀당 이득을
+         패딩 낭비가 다 먹습니다. -->
+  <arg name="model"  default="$(find mando_vision_2026)/weights/obstacle.pt"/>
+  <!-- 1280x736 (네이티브). LED 패널이 960 의 25.7 px 에서 34 px 이 됩니다.
+       실측 29.1 ms (960 일 때 11.8 ms). -->
+  <arg name="imgsz"  default="1280"/>
   <arg name="hz"     default="15"/>
   <arg name="depth"  default="true"/>
   <arg name="depth_topic" default="/cam_front/aligned_depth_to_color/image_raw"/>

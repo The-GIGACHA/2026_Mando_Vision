@@ -20,7 +20,7 @@ obstacle_detector.py — 장애물 + 신호제어차량 지시 (obstacle.pt)
   ★ /perception/obstacle 은 더 이상 여기서 발행하지 않습니다.
     ground_markers 가 /detect/obstacle 을 받아 base_link 좌표로 바꿔 발행하는
     유일한 발행자입니다 (launch/obstacle.launch 가 셋을 같이 띄웁니다).
-    obstacle.engine 을 두 번 올리지 않으려고 여기 추론을 그대로 내보냅니다.
+    obstacle 모델을 두 번 올리지 않으려고 여기 추론을 그대로 내보냅니다.
 
 ────────────────────────────────────────────────────────────────────────
 /perception/sign_car 페이로드
